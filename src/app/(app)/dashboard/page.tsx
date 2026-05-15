@@ -91,7 +91,7 @@ export default function DashboardPage() {
         </div>
         <Link
           href="/trades/add"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <Plus size={14} />
           Log Trade
@@ -133,9 +133,10 @@ export default function DashboardPage() {
             {PERIODS.map((p) => (
               <button
                 key={p}
+                type="button"
                 onClick={() => setPeriod(p)}
                 className={cn(
-                  "px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                  "px-3 py-1 text-xs font-medium rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                   period === p
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -223,14 +224,14 @@ export default function DashboardPage() {
             <div className="w-full h-1.5 bg-muted rounded-full mb-3">
               <div
                 className={cn(
-                  "h-full rounded-full transition-all",
+                  "h-full rounded-full",
                   isOverTarget ? "bg-red-400" : "bg-emerald-500"
                 )}
                 style={{ width: `${CONSISTENCY.value}%` }}
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Largest winning day of total profit
+              Largest winning day as % of total P/L
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Target: Under {CONSISTENCY.target}%

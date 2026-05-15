@@ -12,10 +12,10 @@ import {
 } from "recharts";
 
 const ACCOUNTS = [
-  { key: "apex1",    label: "Apex 50K #1",  color: "#4f86c6" },
-  { key: "apex2",    label: "Apex 50K #2",  color: "#34d399" },
-  { key: "topstep",  label: "Topstep 50K",  color: "#f59e0b" },
-  { key: "tradeify", label: "Tradeify 25K", color: "#a78bfa" },
+  { key: "apex1",    label: "Apex 50K #1",  color: "var(--color-chart-1)" },
+  { key: "apex2",    label: "Apex 50K #2",  color: "var(--color-chart-2)" },
+  { key: "topstep",  label: "Topstep 50K",  color: "var(--color-chart-3)" },
+  { key: "tradeify", label: "Tradeify 25K", color: "var(--color-chart-4)" },
 ] as const;
 
 type AccountKey = (typeof ACCOUNTS)[number]["key"];
@@ -92,14 +92,14 @@ function CustomTooltip({ active, payload, label }: any) {
 
 export function AccountGrowthChart() {
   return (
-    <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm h-full">
+    <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
       <div className="mb-4">
         <p className="text-sm font-semibold text-foreground">Account Growth</p>
         <p className="text-xs text-muted-foreground mt-0.5">
           Tracked account balances over time
         </p>
       </div>
-      <div className="h-[300px]">
+      <div className="h-[360px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={GROWTH_DATA}
