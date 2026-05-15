@@ -64,8 +64,6 @@ export function Sidebar() {
             </Link>
           );
         })}
-      </nav>
-      <div className="p-3 border-t border-sidebar-border">
         <button
           onClick={handleThemeToggle}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
@@ -75,7 +73,7 @@ export function Sidebar() {
           <span className="block dark:hidden">Dark mode</span>
           <span className="hidden dark:block">Light mode</span>
         </button>
-      </div>
+      </nav>
     </aside>
   );
 }
