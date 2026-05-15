@@ -8,6 +8,7 @@ import {
   LineChart,
   Target,
   Settings,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,13 +24,18 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-60 shrink-0 border-r border-zinc-200 bg-white h-screen sticky top-0 flex flex-col">
-      <div className="px-6 py-5 border-b border-zinc-200">
-        <span className="text-lg font-bold tracking-tight text-zinc-900">
-          TradeForge
-        </span>
+    <aside className="w-60 shrink-0 border-r border-sidebar-border bg-sidebar h-screen sticky top-0 flex flex-col">
+      <div className="px-6 py-5 border-b border-sidebar-border">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-sidebar-primary">
+            <TrendingUp size={14} className="text-sidebar-primary-foreground" />
+          </div>
+          <span className="text-base font-semibold tracking-tight text-sidebar-foreground">
+            TradeForge
+          </span>
+        </div>
       </div>
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-0.5">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname.startsWith(item.href);
@@ -40,8 +46,8 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-zinc-900 text-white"
-                  : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
             >
               <Icon size={16} />
