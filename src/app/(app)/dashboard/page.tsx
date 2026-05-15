@@ -61,14 +61,14 @@ export default function DashboardPage() {
 
   const streakStyle = {
     win: {
-      wrapper: "bg-emerald-50 border-emerald-200",
-      value:   "text-emerald-600",
+      wrapper: "bg-emerald-500/10 border-emerald-500/20",
+      value:   "text-emerald-600 dark:text-emerald-400",
       text:    `🔥 ${STREAK.count} trade win streak`,
       hint:    "Keep following your plan",
     },
     loss: {
-      wrapper: "bg-red-50 border-red-200",
-      value:   "text-red-500",
+      wrapper: "bg-red-500/10 border-red-500/20",
+      value:   "text-red-500 dark:text-red-400",
       text:    `💔 ${STREAK.count} trade loss streak`,
       hint:    "Reduce size and reset mentally",
     },
@@ -137,7 +137,7 @@ export default function DashboardPage() {
                 className={cn(
                   "px-3 py-1 text-xs font-medium rounded-md transition-colors",
                   period === p
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -188,7 +188,7 @@ export default function DashboardPage() {
               <span className="text-sm font-semibold text-emerald-600 tabular-nums">
                 +$4,250
               </span>
-              <span className="text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-md px-1.5 py-0.5 tabular-nums">
+              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-1.5 py-0.5 tabular-nums">
                 +2.83%
               </span>
             </div>
@@ -213,8 +213,8 @@ export default function DashboardPage() {
                 className={cn(
                   "text-xs font-medium px-2 py-0.5 rounded-full border",
                   isOverTarget
-                    ? "text-red-600 bg-red-50 border-red-200"
-                    : "text-emerald-600 bg-emerald-50 border-emerald-200"
+                    ? "text-red-500 dark:text-red-400 bg-red-500/10 border-red-500/20"
+                    : "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                 )}
               >
                 {isOverTarget ? "At Risk" : "Safe"}

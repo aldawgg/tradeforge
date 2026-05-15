@@ -9,6 +9,8 @@ import {
   Target,
   Settings,
   TrendingUp,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +21,13 @@ const navItems = [
   { href: "/evaluations", label: "Evaluations", icon: Target },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
+
+function handleThemeToggle() {
+  const isDark = document.documentElement.classList.toggle("dark");
+  try {
+    localStorage.setItem("theme", isDark ? "dark" : "light");
+  } catch {}
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -56,6 +65,17 @@ export function Sidebar() {
           );
         })}
       </nav>
+      <div className="p-3 border-t border-sidebar-border">
+        <button
+          onClick={handleThemeToggle}
+          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+        >
+          <Moon size={16} className="block dark:hidden" />
+          <Sun size={16} className="hidden dark:block" />
+          <span className="block dark:hidden">Dark mode</span>
+          <span className="hidden dark:block">Light mode</span>
+        </button>
+      </div>
     </aside>
   );
 }

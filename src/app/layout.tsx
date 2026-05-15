@@ -27,8 +27,17 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${dmSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* Runs before React hydration to prevent flash of wrong theme */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `!function(){try{var t=localStorage.getItem("theme"),d=window.matchMedia("(prefers-color-scheme:dark)").matches;if(t==="dark"||(t===null&&d))document.documentElement.classList.add("dark")}catch(e){}}()`,
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

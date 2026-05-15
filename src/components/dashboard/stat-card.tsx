@@ -29,8 +29,8 @@ export function StatCard({
         className={cn(
           "font-bold tabular-nums leading-none",
           size === "default" ? "text-2xl" : "text-4xl",
-          valueColor === "green" && "text-emerald-600",
-          valueColor === "red" && "text-red-500",
+          valueColor === "green" && "text-emerald-600 dark:text-emerald-400",
+          valueColor === "red" && "text-red-500 dark:text-red-400",
           valueColor === "default" && "text-foreground"
         )}
       >
