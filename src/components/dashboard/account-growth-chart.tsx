@@ -38,6 +38,24 @@ const GROWTH_DATA: DataPoint[] = [
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function CustomLegend({ payload }: any) {
+  if (!payload?.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-3">
+      {payload.map((entry: { value: string; color: string }) => (
+        <div key={entry.value} className="flex items-center gap-1.5">
+          <span
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: entry.color }}
+          />
+          <span className="text-xs text-muted-foreground">{entry.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   const idx = GROWTH_DATA.findIndex((d) => d.date === label);
@@ -107,11 +125,7 @@ export function AccountGrowthChart() {
               domain={[14000, 58000]}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Legend
-              iconType="circle"
-              iconSize={6}
-              wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
-            />
+            <Legend content={<CustomLegend />} />
             {ACCOUNTS.map((acc) => (
               <Line
                 key={acc.key}

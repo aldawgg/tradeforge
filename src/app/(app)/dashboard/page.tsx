@@ -88,9 +88,6 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">Welcome back, Alden</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{today}</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Here's how your trading accounts are performing today.
-          </p>
         </div>
         <Link
           href="/trades/add"
@@ -111,7 +108,7 @@ export default function DashboardPage() {
           <p className="text-4xl font-bold text-emerald-600 tabular-nums leading-none">
             +$8,400
           </p>
-          <p className="text-xs text-muted-foreground mt-2">all time</p>
+          <p className="text-xs text-muted-foreground mt-2">All time</p>
         </div>
 
         <div className={cn("rounded-xl border px-6 py-5 shadow-sm", streakStyle.wrapper)}>
@@ -126,23 +123,28 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* Period tabs + period stat row */}
+      {/* Period stats */}
       <div className="mb-8">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit mb-3">
-          {PERIODS.map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={cn(
-                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-                period === p
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {p}
-            </button>
-          ))}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Period View
+          </p>
+          <div className="flex items-center gap-0.5 bg-muted rounded-lg p-1">
+            {PERIODS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  "px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                  period === p
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
