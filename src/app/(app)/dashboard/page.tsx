@@ -90,7 +90,7 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground mt-0.5">{today}</p>
         </div>
         <Link
-          href="/trades/add"
+          href="/trades/new"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <Plus size={14} />
