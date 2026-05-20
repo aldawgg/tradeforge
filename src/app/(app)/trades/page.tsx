@@ -140,12 +140,6 @@ const PNL_TEXT: Record<TradeOutcome, string> = {
   Open:        "text-muted-foreground tabular-nums",
 };
 
-const ROW_ACCENT: Record<TradeOutcome, string> = {
-  Profit:      "border-l-2 border-l-emerald-500 pl-3",
-  Loss:        "border-l-2 border-l-red-500    pl-3",
-  "Break even":"border-l-2 border-l-border     pl-3",
-  Open:        "border-l-2 border-l-blue-500   pl-3",
-};
 
 // ── Sortable column header ──────────────────────────────────────────────────
 
@@ -307,19 +301,11 @@ export default function TradesPage() {
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
 
           {/* Table meta bar */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+          <div className="px-5 py-3 border-b border-border">
             <p className="text-xs text-muted-foreground">
               Showing <span className="font-medium text-foreground">5</span> of{" "}
               <span className="font-medium text-foreground">42</span> trades
             </p>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-xs text-muted-foreground mr-3">Profit</span>
-              <span className="w-2 h-2 rounded-full bg-red-500" />
-              <span className="text-xs text-muted-foreground mr-3">Loss</span>
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
-              <span className="text-xs text-muted-foreground">Open</span>
-            </div>
           </div>
 
           <Table className="table-fixed">
@@ -352,12 +338,7 @@ export default function TradesPage() {
                   key={trade.id}
                   className="border-border group cursor-pointer"
                 >
-                  <TableCell
-                    className={cn(
-                      "py-3.5 text-sm text-foreground font-medium",
-                      ROW_ACCENT[trade.outcome]
-                    )}
-                  >
+                  <TableCell className="pl-5 py-3.5 text-sm text-foreground font-medium">
                     {trade.date}
                   </TableCell>
 
@@ -430,13 +411,13 @@ export default function TradesPage() {
 
                   <TableCell className="py-3.5 pr-4">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
+                      <Link
+                        href={`/trades/${trade.id}`}
                         title="View trade"
-                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors inline-flex items-center justify-center"
                       >
                         <Eye size={14} />
-                      </button>
+                      </Link>
                       <button
                         type="button"
                         title="Edit trade"

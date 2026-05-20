@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Trophy } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { AccountGrowthChart } from "@/components/dashboard/account-growth-chart";
 import { cn } from "@/lib/utils";
@@ -46,6 +46,13 @@ const EVAL_STATUSES = [
 ];
 
 const CONSISTENCY = { value: 28, target: 30 };
+
+const BEST_SETUP = {
+  name: "VWAP Bounce",
+  winRate: 73,
+  trades: 15,
+  totalPnl: "+$1,840",
+};
 
 export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("1D");
@@ -98,8 +105,8 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Always-on row: Total P/L + Current Streak */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+      {/* Always-on row: Total P/L + Current Streak + Best Setup */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
 
         <div className="rounded-xl border border-primary/20 bg-primary/5 px-6 py-5 shadow-sm">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
@@ -119,6 +126,36 @@ export default function DashboardPage() {
             {streakStyle.text}
           </p>
           <p className="text-xs text-muted-foreground">{streakStyle.hint}</p>
+        </div>
+
+        {/* Best Setup */}
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-6 py-5 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Best Setup
+            </p>
+            <Trophy size={13} className="text-amber-500 shrink-0" />
+          </div>
+          <p className="text-2xl font-bold text-foreground leading-none mb-3 truncate">
+            {BEST_SETUP.name}
+          </p>
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Win rate</span>
+              <span className="text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {BEST_SETUP.winRate}%
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-muted rounded-full">
+              <div
+                className="h-full rounded-full bg-emerald-500"
+                style={{ width: `${BEST_SETUP.winRate}%` }}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {BEST_SETUP.trades} trades · {BEST_SETUP.totalPnl}
+          </p>
         </div>
 
       </div>

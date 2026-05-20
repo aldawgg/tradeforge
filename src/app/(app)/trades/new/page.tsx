@@ -19,6 +19,12 @@ import { cn } from "@/lib/utils";
 
 const INSTRUMENTS = ["MES", "MNQ", "ES", "NQ", "Other / Custom"] as const;
 const SESSIONS = ["Asia", "London", "New York AM", "New York PM", "Other"] as const;
+const ACCOUNTS = [
+  "Apex 50K #1",
+  "Apex 50K #2",
+  "Topstep 50K",
+  "Tradeify 25K",
+] as const;
 
 const SETUPS = [
   "VWAP bounce",
@@ -86,6 +92,7 @@ const OUTCOME_STYLES: Record<Outcome, string> = {
 
 interface FormState {
   date: string;
+  accounts: string[];
   instrument: string;
   customInstrument: string;
   direction: "Long" | "Short" | "";
@@ -108,6 +115,7 @@ interface FormState {
 
 interface FormErrors {
   date?: string;
+  accounts?: string;
   instrument?: string;
   customInstrument?: string;
   direction?: string;
@@ -300,6 +308,7 @@ function getToday(): string {
 }
 
 const EMPTY_FORM_BASE: Omit<FormState, "date"> = {
+  accounts: [],
   instrument: "",
   customInstrument: "",
   direction: "",
@@ -372,6 +381,15 @@ export default function AddTradePage() {
       if (key === "tradeStatus") delete next.outcome;
       return next;
     });
+  }
+
+  function toggleAccount(account: string) {
+    setFormState((prev) => ({
+      ...prev,
+      accounts: prev.accounts.includes(account)
+        ? prev.accounts.filter((a) => a !== account)
+        : [...prev.accounts, account],
+    }));
   }
 
   function toggleTag(field: "positiveTags" | "improvements", tag: string) {
@@ -628,6 +646,34 @@ export default function AddTradePage() {
               </FieldGroup>
             </div>
           )}
+
+          {/* Account — multi-select pills */}
+          <div className="mt-4">
+            <FieldGroup
+              label="Account"
+              error={errors.accounts}
+              hint="Select all accounts this trade was taken on."
+            >
+              <div className="flex flex-wrap gap-2 mt-0.5">
+                {ACCOUNTS.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    aria-pressed={form.accounts.includes(a)}
+                    onClick={() => toggleAccount(a)}
+                    className={cn(
+                      "px-2.5 py-1 text-xs font-medium rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                      form.accounts.includes(a)
+                        ? "bg-primary/10 border-primary/40 text-primary"
+                        : "border-input text-muted-foreground hover:text-foreground hover:bg-accent"
+                    )}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </FieldGroup>
+          </div>
 
           {/* Direction + Session */}
           <div className="grid grid-cols-2 gap-4 mt-4">
