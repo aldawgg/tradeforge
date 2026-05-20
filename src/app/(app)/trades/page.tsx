@@ -418,13 +418,13 @@ export default function TradesPage() {
                       >
                         <Eye size={14} />
                       </Link>
-                      <button
-                        type="button"
+                      <Link
+                        href={`/trades/${trade.id}/edit`}
                         title="Edit trade"
                         className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <Pencil size={14} />
-                      </button>
+                      </Link>
                     </div>
                   </TableCell>
 
