@@ -81,7 +81,7 @@ export default function DashboardPage() {
   }[STREAK.type];
 
   return (
-    <div className="p-6 md:p-8 max-w-6xl">
+    <div className="p-6 md:p-8">
 
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
