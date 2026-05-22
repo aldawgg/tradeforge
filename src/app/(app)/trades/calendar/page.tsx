@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Flame, Zap, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -57,7 +57,8 @@ function fmtPnl(n: number): string {
 
 function fmtPnlShort(n: number): string {
   const abs = Math.abs(n);
-  const s = abs >= 1000 ? `$${(abs / 1000).toFixed(1)}k` : `$${abs}`;
+  const k = abs / 1000;
+  const s = abs >= 1000 ? `$${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}k` : `$${abs}`;
   return (n >= 0 ? "+" : "-") + s;
 }
 
@@ -162,18 +163,39 @@ function StatPill({
   sub,
   color,
   meter,
+  icon,
 }: {
   label: string;
   value: string;
   sub?: string;
   color?: "green" | "red" | "default";
   meter?: number;
+  icon?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm flex flex-col gap-1.5 min-w-[110px]">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide leading-none">
-        {label}
-      </p>
+    <div
+      className={cn(
+        "rounded-xl border px-4 py-3 shadow-sm flex flex-col gap-1.5",
+        color === "green" && "bg-emerald-500/[0.05] dark:bg-emerald-500/[0.07] border-emerald-500/20",
+        color === "red"   && "bg-red-500/[0.05] dark:bg-red-500/[0.07] border-red-500/20",
+        (!color || color === "default") && "bg-card border-border"
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide leading-none">
+          {label}
+        </p>
+        {icon && (
+          <span
+            className={cn(
+              "shrink-0",
+              color === "green" ? "text-emerald-500" : color === "red" ? "text-red-400" : "text-muted-foreground/40"
+            )}
+          >
+            {icon}
+          </span>
+        )}
+      </div>
       <p
         className={cn(
           "text-lg font-bold tabular-nums leading-none",
@@ -260,6 +282,15 @@ export default function TradeCalendarPage() {
           >
             <ChevronRight size={16} />
           </button>
+          {(year !== today.getFullYear() || month !== today.getMonth()) && (
+            <button
+              type="button"
+              onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }}
+              className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              Today
+            </button>
+          )}
         </div>
       </div>
 
@@ -381,12 +412,14 @@ export default function TradeCalendarPage() {
               value={stats.dayStreak === 0 ? "—" : `${Math.abs(stats.dayStreak)}${stats.dayStreak > 0 ? "W" : "L"}`}
               color={stats.dayStreak > 0 ? "green" : stats.dayStreak < 0 ? "red" : "default"}
               sub={stats.dayStreak > 0 ? "winning days" : stats.dayStreak < 0 ? "losing days" : ""}
+              icon={stats.dayStreak > 0 ? <Flame size={12} /> : stats.dayStreak < 0 ? <TrendingDown size={12} /> : undefined}
             />
             <StatPill
               label="Trade Streak"
               value={stats.tradeStreak === 0 ? "—" : `${Math.abs(stats.tradeStreak)}${stats.tradeStreak > 0 ? "W" : "L"}`}
               color={stats.tradeStreak > 0 ? "green" : stats.tradeStreak < 0 ? "red" : "default"}
               sub={stats.tradeStreak > 0 ? "winning trades" : stats.tradeStreak < 0 ? "losing trades" : ""}
+              icon={stats.tradeStreak > 0 ? <Zap size={12} /> : stats.tradeStreak < 0 ? <TrendingDown size={12} /> : undefined}
             />
           </div>
         </div>
@@ -404,7 +437,7 @@ export default function TradeCalendarPage() {
                 {d}
               </div>
             ))}
-            <div className="w-[88px] shrink-0 text-center text-xs font-semibold text-muted-foreground py-1 bg-muted/60 rounded-md">
+            <div className="w-[88px] shrink-0 text-center text-xs font-semibold text-muted-foreground py-1 bg-muted rounded-md">
               WK
             </div>
           </div>
@@ -443,22 +476,20 @@ export default function TradeCalendarPage() {
                     const isProfit = net !== null && net > 0;
                     const isLoss   = net !== null && net < 0;
 
-                    return (
-                      <div
-                        key={di}
-                        className={cn(
-                          "flex-1 rounded-xl border h-[88px] px-2.5 py-2 flex flex-col gap-1 cursor-default",
-                          isToday
-                            ? "border-primary ring-2 ring-primary/20 bg-primary/5"
-                            : "border-border",
-                          !isToday && isWeekend && "bg-muted/20",
-                          !isToday && isProfit  && "bg-emerald-500/[0.06] dark:bg-emerald-500/[0.08]",
-                          !isToday && isLoss    && "bg-red-500/[0.06] dark:bg-red-500/[0.08]",
-                          !isToday && !data && !isWeekend && "bg-card",
-                          !isToday && data && !isProfit && !isLoss && "bg-card"
-                        )}
-                      >
-                        {/* Date number */}
+                    const sharedCellClass = cn(
+                      "flex-1 rounded-xl border h-[88px] px-2.5 py-2 flex flex-col gap-1",
+                      isToday
+                        ? "border-primary ring-2 ring-primary/20 bg-primary/5"
+                        : "border-border",
+                      !isToday && isWeekend && "bg-muted/20",
+                      !isToday && isProfit  && "bg-emerald-500/[0.06] dark:bg-emerald-500/[0.08]",
+                      !isToday && isLoss    && "bg-red-500/[0.06] dark:bg-red-500/[0.08]",
+                      !isToday && !data && !isWeekend && "bg-card",
+                      !isToday && data && !isProfit && !isLoss && "bg-card"
+                    );
+
+                    const cellContent = (
+                      <>
                         <span
                           className={cn(
                             "text-xs font-semibold leading-none",
@@ -470,7 +501,6 @@ export default function TradeCalendarPage() {
 
                         {data ? (
                           <>
-                            {/* Net P&L */}
                             <span
                               className={cn(
                                 "text-sm font-bold tabular-nums leading-none",
@@ -479,8 +509,6 @@ export default function TradeCalendarPage() {
                             >
                               {fmtPnlShort(net!)}
                             </span>
-
-                            {/* Trade count + win rate */}
                             <div className="flex items-center gap-1.5 mt-auto">
                               <span className="text-xs text-muted-foreground">
                                 {data.trades} {data.trades === 1 ? "trade" : "trades"}
@@ -504,6 +532,20 @@ export default function TradeCalendarPage() {
                             No trades
                           </span>
                         ) : null}
+                      </>
+                    );
+
+                    return data ? (
+                      <Link
+                        key={di}
+                        href={`/trades?date=${key}`}
+                        className={cn(sharedCellClass, "cursor-pointer hover:border-primary/40 transition-colors")}
+                      >
+                        {cellContent}
+                      </Link>
+                    ) : (
+                      <div key={di} className={sharedCellClass}>
+                        {cellContent}
                       </div>
                     );
                   })}

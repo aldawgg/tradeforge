@@ -189,11 +189,13 @@ export default function DashboardPage() {
             label={`${PERIOD_LABELS[period]} P/L`}
             value={d.pl}
             valueColor={d.plColor}
+            tint={d.plColor !== "default" ? d.plColor : undefined}
           />
           <StatCard
             label="Win Rate"
             value={d.winRate}
             subtitle={d.winRateSubtitle}
+            meter={parseFloat(d.winRate)}
           />
           <StatCard
             label="Trades"

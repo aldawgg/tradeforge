@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Plus,
   Search,
@@ -10,6 +11,8 @@ import {
   Eye,
   Pencil,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Input } from "@/components/ui/input";
@@ -141,9 +144,28 @@ const PNL_TEXT: Record<TradeOutcome, string> = {
 };
 
 
+type SortKey = "date" | "account" | "setup" | "pnl" | "rMultiple";
+type SortDir = "asc" | "desc";
+
 // ── Sortable column header ──────────────────────────────────────────────────
 
-function SortHead({ children, className }: { children: React.ReactNode; className?: string }) {
+function SortHead({
+  children,
+  className,
+  sortKey,
+  activeKey,
+  activeDir,
+  onSort,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  sortKey: SortKey;
+  activeKey: SortKey | null;
+  activeDir: SortDir;
+  onSort: (k: SortKey) => void;
+}) {
+  const isActive = activeKey === sortKey;
+  const Icon = isActive ? (activeDir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
     <TableHead
       className={cn(
@@ -153,10 +175,14 @@ function SortHead({ children, className }: { children: React.ReactNode; classNam
     >
       <button
         type="button"
-        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          "inline-flex items-center gap-1 transition-colors",
+          isActive ? "text-foreground" : "hover:text-foreground"
+        )}
       >
         {children}
-        <ArrowUpDown size={11} className="opacity-40" />
+        <Icon size={11} className={isActive ? "opacity-80" : "opacity-40"} />
       </button>
     </TableHead>
   );
@@ -164,8 +190,33 @@ function SortHead({ children, className }: { children: React.ReactNode; classNam
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
+function pnlToNumber(pnl: string): number {
+  return parseFloat(pnl.replace(/[^0-9.-]/g, "")) * (pnl.startsWith("-") ? -1 : 1);
+}
+
 export default function TradesPage() {
+  const router = useRouter();
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  }
+
+  const sortedTrades = [...PLACEHOLDER_TRADES].sort((a, b) => {
+    if (!sortKey) return 0;
+    const dir = sortDir === "asc" ? 1 : -1;
+    switch (sortKey) {
+      case "date":      return dir * (new Date(a.date).getTime() - new Date(b.date).getTime());
+      case "account":   return dir * a.account.localeCompare(b.account);
+      case "setup":     return dir * a.setup.localeCompare(b.setup);
+      case "pnl":       return dir * (pnlToNumber(a.pnl) - pnlToNumber(b.pnl));
+      case "rMultiple": return dir * (pnlToNumber(a.rMultiple) - pnlToNumber(b.rMultiple));
+      default:          return 0;
+    }
+  });
 
   const hasTrades = PLACEHOLDER_TRADES.length > 0;
 
@@ -311,20 +362,20 @@ export default function TradesPage() {
           <Table className="table-fixed">
             <TableHeader>
               <TableRow className="hover:bg-transparent border-border bg-muted/30">
-                <SortHead className="w-[13%] pl-5">Date</SortHead>
-                <SortHead className="w-[14%]">Account</SortHead>
+                <SortHead className="w-[13%] pl-5" sortKey="date"      activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Date</SortHead>
+                <SortHead className="w-[14%]"       sortKey="account"   activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Account</SortHead>
                 <TableHead className="w-[7%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Instrument
                 </TableHead>
                 <TableHead className="w-[8%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Direction
                 </TableHead>
-                <SortHead className="w-[17%]">Setup</SortHead>
+                <SortHead className="w-[17%]"       sortKey="setup"     activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Setup</SortHead>
                 <TableHead className="w-[10%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Outcome
                 </TableHead>
-                <SortHead className="w-[10%]">P/L</SortHead>
-                <SortHead className="w-[9%]">R-Mult.</SortHead>
+                <SortHead className="w-[10%]"       sortKey="pnl"       activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>P/L</SortHead>
+                <SortHead className="w-[9%]"        sortKey="rMultiple" activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>R</SortHead>
                 <TableHead className="w-[8%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Status
                 </TableHead>
@@ -333,10 +384,11 @@ export default function TradesPage() {
             </TableHeader>
 
             <TableBody>
-              {PLACEHOLDER_TRADES.map((trade) => (
+              {sortedTrades.map((trade) => (
                 <TableRow
                   key={trade.id}
                   className="border-border group cursor-pointer"
+                  onClick={() => router.push(`/trades/${trade.id}`)}
                 >
                   <TableCell className="pl-5 py-3.5 text-sm text-foreground font-medium">
                     {trade.date}
@@ -436,7 +488,7 @@ export default function TradesPage() {
           {/* Table footer */}
           <div className="px-5 py-3 border-t border-border bg-muted/20">
             <p className="text-xs text-muted-foreground">
-              Filters and pagination will be available once trades are connected to the database.
+              Showing <span className="font-medium text-foreground">{sortedTrades.length}</span> trades
             </p>
           </div>
 
