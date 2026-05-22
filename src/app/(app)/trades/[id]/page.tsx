@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -33,7 +34,9 @@ const TRADE = {
   stopLoss: "21,425.00",
   target: "21,500.00",
   riskPoints: "25.25",
+  riskDollars: "$101",
   rewardCaptured: "37.25",
+  rewardDollars: "$149",
   wentWell: [
     "Waited for confirmation",
     "Followed trading plan",
@@ -110,9 +113,48 @@ function PriceRow({
   );
 }
 
+function UnitToggle({
+  showDollars,
+  onToggle,
+}: {
+  showDollars: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+      <button
+        type="button"
+        onClick={() => showDollars && onToggle()}
+        className={cn(
+          "px-2 py-0.5 text-xs font-medium rounded transition-colors",
+          !showDollars
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        pts
+      </button>
+      <button
+        type="button"
+        onClick={() => !showDollars && onToggle()}
+        className={cn(
+          "px-2 py-0.5 text-xs font-medium rounded transition-colors",
+          showDollars
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        $
+      </button>
+    </div>
+  );
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function TradeDetailPage() {
+  const [showDollars, setShowDollars] = useState(false);
+
   return (
     <div className="p-6 md:p-8">
 
@@ -173,8 +215,14 @@ export default function TradeDetailPage() {
         />
         <StatCard
           label="Risk"
-          value={`${TRADE.riskPoints} pts`}
+          value={showDollars ? TRADE.riskDollars : `${TRADE.riskPoints} pts`}
           subtitle="Entry to stop loss distance"
+          action={
+            <UnitToggle
+              showDollars={showDollars}
+              onToggle={() => setShowDollars((v) => !v)}
+            />
+          }
         />
         <StatCard
           label="Contracts"
@@ -293,19 +341,25 @@ export default function TradeDetailPage() {
             <PriceRow label="Target"      value={TRADE.target}     />
 
             <div className="mt-3 pt-3 border-t border-border">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                Risk / Reward
-              </p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Risk / Reward
+                </p>
+                <UnitToggle
+                  showDollars={showDollars}
+                  onToggle={() => setShowDollars((v) => !v)}
+                />
+              </div>
               <PriceRow
                 label="Risk"
                 hint="Entry to stop loss distance"
-                value={`${TRADE.riskPoints} pts`}
+                value={showDollars ? TRADE.riskDollars : `${TRADE.riskPoints} pts`}
                 color="red"
               />
               <PriceRow
                 label="Reward captured"
                 hint="Actual move from entry to exit"
-                value={`${TRADE.rewardCaptured} pts`}
+                value={showDollars ? TRADE.rewardDollars : `${TRADE.rewardCaptured} pts`}
                 color="green"
               />
             </div>

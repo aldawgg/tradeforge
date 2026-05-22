@@ -5,6 +5,7 @@ interface StatCardProps {
   value: string;
   subtitle?: string;
   valueColor?: "green" | "red" | "default";
+  action?: React.ReactNode;
 }
 
 export function StatCard({
@@ -12,12 +13,16 @@ export function StatCard({
   value,
   subtitle,
   valueColor = "default",
+  action,
 }: StatCardProps) {
   return (
     <div className="rounded-xl border bg-card px-5 py-4 shadow-sm">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-        {label}
-      </p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {label}
+        </p>
+        {action && <div className="shrink-0 ml-2">{action}</div>}
+      </div>
       <p
         className={cn(
           "text-2xl font-bold tabular-nums leading-none",

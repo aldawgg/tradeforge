@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -11,15 +12,25 @@ import {
   TrendingUp,
   Moon,
   Sun,
+  ChevronDown,
+  List,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+const TOP_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/trades", label: "Trades", icon: ClipboardList },
+];
+
+const BOTTOM_NAV = [
   { href: "/analytics", label: "Analytics", icon: LineChart },
   { href: "/evaluations", label: "Evaluations", icon: Target },
   { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const TRADES_SUB = [
+  { href: "/trades", label: "Trade History", icon: List },
+  { href: "/trades/calendar", label: "Trade Calendar", icon: CalendarDays },
 ];
 
 function handleThemeToggle() {
@@ -31,6 +42,9 @@ function handleThemeToggle() {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const tradesActive = pathname.startsWith("/trades");
+  const [tradesOpen, setTradesOpen] = useState(tradesActive);
+  const tradesExpanded = tradesOpen || tradesActive;
 
   return (
     <aside className="w-60 shrink-0 border-r border-sidebar-border bg-sidebar h-screen sticky top-0 flex flex-col">
@@ -45,7 +59,7 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="flex-1 p-3 space-y-0.5">
-        {navItems.map((item) => {
+        {TOP_NAV.map((item) => {
           const Icon = item.icon;
           const isActive = pathname.startsWith(item.href);
           return (
@@ -64,6 +78,72 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Expandable Trades section */}
+        <button
+          type="button"
+          onClick={() => setTradesOpen((v) => !v)}
+          className={cn(
+            "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+            tradesActive
+              ? "bg-sidebar-primary text-sidebar-primary-foreground"
+              : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          )}
+        >
+          <ClipboardList size={16} />
+          <span className="flex-1 text-left">Trades</span>
+          <ChevronDown
+            size={14}
+            className={cn(
+              "transition-transform duration-200",
+              tradesExpanded ? "rotate-180" : "rotate-0"
+            )}
+          />
+        </button>
+        {tradesExpanded && (
+          <div className="ml-3 pl-3 border-l border-sidebar-border space-y-0.5">
+            {TRADES_SUB.map((sub) => {
+              const Icon = sub.icon;
+              const isActive = pathname === sub.href;
+              return (
+                <Link
+                  key={sub.href}
+                  href={sub.href}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                      : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <Icon size={14} />
+                  {sub.label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
+        {BOTTOM_NAV.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              )}
+            >
+              <Icon size={16} />
+              {item.label}
+            </Link>
+          );
+        })}
+
         <button
           onClick={handleThemeToggle}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
