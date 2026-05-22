@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Trophy, Cpu, Clock, AlertTriangle, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Trophy, BarChart2, Clock, AlertTriangle, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -16,13 +16,6 @@ import {
 import { cn } from "@/lib/utils";
 
 // ── Placeholder data ──────────────────────────────────────────────────────────
-
-const INSIGHTS = {
-  bestSetup:      "VWAP Bounce",
-  bestInstrument: "MNQ",
-  bestSession:    "New York AM",
-  biggestMistake: "Entered too early",
-};
 
 const PERIODS = ["1D", "1W", "1M", "YTD"] as const;
 type Period = (typeof PERIODS)[number];
@@ -71,6 +64,11 @@ const BEHAVIOUR_STATS: TagRow[] = [
 
 const MISTAKE_MAX   = Math.max(...MISTAKE_STATS.map((m) => m.count));
 const BEHAVIOUR_MAX = Math.max(...BEHAVIOUR_STATS.map((b) => b.count));
+
+const bestSetupRow      = SETUP_STATS.reduce((a, b) => b.pnl > a.pnl ? b : a);
+const bestInstrumentRow = INSTRUMENT_STATS.reduce((a, b) => b.pnl > a.pnl ? b : a);
+const bestSessionRow    = SESSION_STATS.reduce((a, b) => b.pnl > a.pnl ? b : a);
+const biggestMistakeRow = MISTAKE_STATS.reduce((a, b) => b.count > a.count ? b : a);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -180,6 +178,8 @@ function SetupSortHead({
   activeKey,
   activeDir,
   onSort,
+  scope,
+  title,
 }: {
   children: React.ReactNode;
   className?: string;
@@ -187,10 +187,14 @@ function SetupSortHead({
   activeKey: SetupSortKey | null;
   activeDir: SortDir;
   onSort: (k: SetupSortKey) => void;
+  scope?: string;
+  title?: string;
 }) {
   const isActive = activeKey === sortKey;
   return (
     <th
+      scope={scope}
+      title={title}
       className={cn(
         "text-right text-xs font-medium text-muted-foreground uppercase tracking-wide px-4 py-2.5 cursor-pointer select-none hover:text-foreground transition-colors",
         isActive && "text-foreground",
@@ -308,9 +312,11 @@ export default function AnalyticsPage() {
             <Trophy size={13} className="text-amber-500 shrink-0" />
           </div>
           <p className="text-sm font-semibold text-foreground leading-snug">
-            {INSIGHTS.bestSetup}
+            {bestSetupRow.name}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">73% win rate</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {winRatePct(bestSetupRow.wins, bestSetupRow.trades)}% win rate
+          </p>
         </div>
 
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-5 py-4 shadow-sm">
@@ -318,12 +324,14 @@ export default function AnalyticsPage() {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Best Instrument
             </p>
-            <Cpu size={13} className="text-blue-500 shrink-0" />
+            <BarChart2 size={13} className="text-blue-500 shrink-0" />
           </div>
           <p className="text-sm font-semibold text-foreground leading-snug">
-            {INSIGHTS.bestInstrument}
+            {bestInstrumentRow.name}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">65% win rate</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {winRatePct(bestInstrumentRow.wins, bestInstrumentRow.trades)}% win rate
+          </p>
         </div>
 
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-4 shadow-sm">
@@ -334,9 +342,11 @@ export default function AnalyticsPage() {
             <Clock size={13} className="text-emerald-500 shrink-0" />
           </div>
           <p className="text-sm font-semibold text-foreground leading-snug">
-            {INSIGHTS.bestSession}
+            {bestSessionRow.name}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">64% win rate</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {winRatePct(bestSessionRow.wins, bestSessionRow.trades)}% win rate
+          </p>
         </div>
 
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-5 py-4 shadow-sm">
@@ -347,9 +357,11 @@ export default function AnalyticsPage() {
             <AlertTriangle size={13} className="text-red-500 shrink-0" />
           </div>
           <p className="text-sm font-semibold text-foreground leading-snug">
-            {INSIGHTS.biggestMistake}
+            {biggestMistakeRow.name}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">8 times tagged</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {biggestMistakeRow.count} times tagged
+          </p>
         </div>
       </div>
 
@@ -403,11 +415,14 @@ export default function AnalyticsPage() {
                   tickLine={false}
                 />
                 <YAxis
-                  tickFormatter={(v: number) =>
-                    v === 0
-                      ? "$0"
-                      : `${v < 0 ? "-" : ""}$${(Math.abs(v) / 1000).toFixed(1)}k`
-                  }
+                  tickFormatter={(v: number) => {
+                    if (v === 0) return "$0";
+                    const abs = Math.abs(v);
+                    const sign = v < 0 ? "-" : "";
+                    return abs >= 1000
+                      ? `${sign}$${(abs / 1000).toFixed(1)}k`
+                      : `${sign}$${abs}`;
+                  }}
                   tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
@@ -481,13 +496,13 @@ export default function AnalyticsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wide px-5 py-2.5">
+              <th scope="col" className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wide px-5 py-2.5">
                 Setup
               </th>
-              <SetupSortHead sortKey="trades"  activeKey={setupSortKey} activeDir={setupSortDir} onSort={handleSetupSort}>Trades</SetupSortHead>
-              <SetupSortHead sortKey="winRate" activeKey={setupSortKey} activeDir={setupSortDir} onSort={handleSetupSort}>Win Rate</SetupSortHead>
-              <SetupSortHead sortKey="pnl"     activeKey={setupSortKey} activeDir={setupSortDir} onSort={handleSetupSort}>Total P/L</SetupSortHead>
-              <SetupSortHead sortKey="avgR"    activeKey={setupSortKey} activeDir={setupSortDir} onSort={handleSetupSort} className="px-5">Avg R</SetupSortHead>
+              <SetupSortHead scope="col" sortKey="trades"  activeKey={setupSortKey} activeDir={setupSortDir} onSort={handleSetupSort}>Trades</SetupSortHead>
+              <SetupSortHead scope="col" sortKey="winRate" activeKey={setupSortKey} activeDir={setupSortDir} onSort={handleSetupSort}>Win Rate</SetupSortHead>
+              <SetupSortHead scope="col" sortKey="pnl"     activeKey={setupSortKey} activeDir={setupSortDir} onSort={handleSetupSort}>Total P/L</SetupSortHead>
+              <SetupSortHead scope="col" sortKey="avgR"    activeKey={setupSortKey} activeDir={setupSortDir} onSort={handleSetupSort} className="px-5" title="Average R-multiple per trade">Avg R</SetupSortHead>
             </tr>
           </thead>
           <tbody>
