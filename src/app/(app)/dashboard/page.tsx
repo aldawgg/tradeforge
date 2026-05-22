@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Trophy } from "lucide-react";
+import { Plus, Trophy, ExternalLink } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { AccountGrowthChart } from "@/components/dashboard/account-growth-chart";
 import { cn } from "@/lib/utils";
@@ -98,12 +98,31 @@ export default function DashboardPage() {
         </div>
         <Link
           href="/trades/new"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          <Plus size={14} />
+          <Plus size={15} />
           Log Trade
         </Link>
       </div>
+
+      {/* No-trades-today prompt — only shown on 1D with zero trades */}
+      {period === "1D" && d.trades === "0" && (
+        <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-foreground">No trades logged today</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Start your session by logging your first trade.
+            </p>
+          </div>
+          <Link
+            href="/trades/new"
+            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            <Plus size={14} />
+            Log Trade
+          </Link>
+        </div>
+      )}
 
       {/* Always-on row: Total P/L + Current Streak + Best Setup */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
@@ -164,7 +183,7 @@ export default function DashboardPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Period View
+            Performance
           </p>
           <div className="flex items-center gap-0.5 bg-muted rounded-lg p-1">
             {PERIODS.map((p) => (
@@ -221,7 +240,7 @@ export default function DashboardPage() {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
               Total Account Balance
             </p>
-            <p className="text-3xl font-bold text-foreground tabular-nums leading-none">
+            <p className="text-2xl font-bold text-foreground tabular-nums leading-none">
               $154,250
             </p>
             <div className="flex items-center gap-2 mt-1.5">
@@ -236,7 +255,12 @@ export default function DashboardPage() {
           </div>
 
           {/* Consistency Score */}
-          <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
+          <div className={cn(
+            "rounded-xl border px-5 py-4 shadow-sm",
+            isOverTarget
+              ? "border-red-500/20 bg-red-500/[0.04]"
+              : "border-border bg-card"
+          )}>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
               Consistency Score
             </p>
@@ -279,9 +303,18 @@ export default function DashboardPage() {
 
           {/* Eval Status */}
           <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
-              Eval Status
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Eval Status
+              </p>
+              <Link
+                href="/evaluations"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                View all
+                <ExternalLink size={10} />
+              </Link>
+            </div>
             <div className="space-y-2.5">
               {EVAL_STATUSES.map((s) => (
                 <div key={s.label} className="flex items-center justify-between">
