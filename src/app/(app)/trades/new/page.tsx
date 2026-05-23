@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -332,16 +332,10 @@ const EMPTY_FORM_BASE: Omit<FormState, "date"> = {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function AddTradePage() {
-  const [form, setFormState] = useState<FormState>(() => ({
-    ...EMPTY_FORM_BASE,
-    date: getToday(),
-  }));
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [submitted, setSubmitted] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Pre-fill instrument, session, and direction from last trade
-  useEffect(() => {
+  const [form, setFormState] = useState<FormState>(() => {
+    const base: FormState = { ...EMPTY_FORM_BASE, date: getToday() };
+    // Read saved defaults from sessionStorage. The try/catch handles both SSR
+    // (where sessionStorage is undefined) and disabled/private-browsing contexts.
     try {
       const raw = sessionStorage.getItem("tradeforge_defaults");
       if (raw) {
@@ -351,17 +345,20 @@ export default function AddTradePage() {
           session?: string;
           direction?: string;
         };
-        setFormState((prev) => ({
-          ...prev,
-          instrument: saved.instrument || prev.instrument,
-          customInstrument: saved.customInstrument || prev.customInstrument,
-          session: saved.session || prev.session,
-          direction:
-            (saved.direction as FormState["direction"]) || prev.direction,
-        }));
+        return {
+          ...base,
+          instrument: saved.instrument || base.instrument,
+          customInstrument: saved.customInstrument || base.customInstrument,
+          session: saved.session || base.session,
+          direction: (saved.direction as FormState["direction"]) || base.direction,
+        };
       }
     } catch {}
-  }, []);
+    return base;
+  });
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setFormState((prev) => {

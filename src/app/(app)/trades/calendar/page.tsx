@@ -70,7 +70,7 @@ function getMonthWeeks(year: number, month: number): (Date | null)[][] {
 
   // Monday=0 offset
   const startOffset = (firstDay.getDay() + 6) % 7;
-  let cursor = new Date(firstDay);
+  const cursor = new Date(firstDay);
   cursor.setDate(cursor.getDate() - startOffset);
 
   while (cursor <= lastDay || cursor.getDay() !== 1) {

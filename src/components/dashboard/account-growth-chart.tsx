@@ -10,32 +10,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-
-const ACCOUNTS = [
-  { key: "apex1",    label: "Apex 50K #1",  color: "var(--color-chart-1)" },
-  { key: "apex2",    label: "Apex 50K #2",  color: "var(--color-chart-2)" },
-  { key: "topstep",  label: "Topstep 50K",  color: "var(--color-chart-3)" },
-  { key: "tradeify", label: "Tradeify 25K", color: "var(--color-chart-4)" },
-] as const;
-
-type AccountKey = (typeof ACCOUNTS)[number]["key"];
-
-interface DataPoint {
-  date: string;
-  apex1: number;
-  apex2: number;
-  topstep: number;
-  tradeify: number;
-}
-
-const GROWTH_DATA: DataPoint[] = [
-  { date: "Dec",  apex1: 50000, apex2: 50000, topstep: 50000, tradeify: 25000 },
-  { date: "Jan",  apex1: 51500, apex2: 50800, topstep: 48200, tradeify: 25600 },
-  { date: "Feb",  apex1: 52800, apex2: 51200, topstep: 46800, tradeify: 26400 },
-  { date: "Mar",  apex1: 53600, apex2: 50400, topstep: 42100, tradeify: 27800 },
-  { date: "Apr",  apex1: 51900, apex2: 49600, topstep: 38700, tradeify: 28500 },
-  { date: "May",  apex1: 52000, apex2: 48500, topstep: 35500, tradeify: 18250 },
-];
+import { MOCK_CHART_ACCOUNTS, MOCK_GROWTH_DATA } from "@/lib/mock-data";
+import type { AccountGrowthPoint } from "@/lib/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomLegend({ payload }: any) {
@@ -58,14 +34,15 @@ function CustomLegend({ payload }: any) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
-  const idx = GROWTH_DATA.findIndex((d) => d.date === label);
+  const idx = MOCK_GROWTH_DATA.findIndex((d: AccountGrowthPoint) => d.date === label);
 
   return (
     <div className="rounded-lg border border-border bg-popover px-3 py-2.5 shadow-lg text-xs min-w-[195px]">
       <p className="font-semibold text-foreground mb-2">{label}</p>
       {payload.map(
-        (entry: { dataKey: AccountKey; name: string; value: number; color: string }) => {
-          const prev = idx > 0 ? GROWTH_DATA[idx - 1][entry.dataKey] : entry.value;
+        (entry: { dataKey: string; name: string; value: number; color: string }) => {
+          const prevPoint = idx > 0 ? MOCK_GROWTH_DATA[idx - 1] : null;
+          const prev = prevPoint ? (prevPoint[entry.dataKey] as number) : entry.value;
           const change = entry.value - prev;
           const pct = prev > 0 ? ((change / prev) * 100).toFixed(1) : "0.0";
           const isPos = change >= 0;
@@ -102,7 +79,7 @@ export function AccountGrowthChart() {
       <div className="h-[360px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
-            data={GROWTH_DATA}
+            data={MOCK_GROWTH_DATA}
             margin={{ top: 4, right: 4, bottom: 0, left: 4 }}
           >
             <CartesianGrid
@@ -126,7 +103,7 @@ export function AccountGrowthChart() {
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend content={<CustomLegend />} />
-            {ACCOUNTS.map((acc) => (
+            {MOCK_CHART_ACCOUNTS.map((acc) => (
               <Line
                 key={acc.key}
                 type="monotone"

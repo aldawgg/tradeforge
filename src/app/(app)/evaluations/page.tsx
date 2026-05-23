@@ -4,159 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { Plus, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-type EvalStatus = "Not Started" | "In Eval" | "Passed" | "Funded" | "Breached";
-
-interface EvalAccount {
-  id: string;
-  firm: string;
-  accountName: string;
-  accountSize: number;
-  startingBalance: number;
-  currentBalance: number;
-  profitTarget: number | null;
-  maxDrawdown: number;
-  dailyLossLimit: number;
-  minTradingDays: number;
-  completedTradingDays: number;
-  status: EvalStatus;
-  consistency: number | null;
-  consistencyThreshold: number | null;
-  notes: string;
-}
-
-// ── Placeholder accounts ───────────────────────────────────────────────────
-
-const PLACEHOLDER_ACCOUNTS: EvalAccount[] = [
-  {
-    id: "1",
-    firm: "Apex",
-    accountName: "Apex 50K #1",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 51250,
-    profitTarget: 53000,
-    maxDrawdown: 2500,
-    dailyLossLimit: 1000,
-    minTradingDays: 7,
-    completedTradingDays: 4,
-    status: "In Eval",
-    consistency: 28,
-    consistencyThreshold: 30,
-    notes: "On track. Avoid trading Fridays.",
-  },
-  {
-    id: "2",
-    firm: "Apex",
-    accountName: "Apex 50K #2",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 50800,
-    profitTarget: 53000,
-    maxDrawdown: 2500,
-    dailyLossLimit: 1000,
-    minTradingDays: 7,
-    completedTradingDays: 2,
-    status: "In Eval",
-    consistency: 15,
-    consistencyThreshold: 30,
-    notes: "",
-  },
-  {
-    id: "3",
-    firm: "Apex",
-    accountName: "Apex 50K #3",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 53200,
-    profitTarget: 53000,
-    maxDrawdown: 2500,
-    dailyLossLimit: 1000,
-    minTradingDays: 7,
-    completedTradingDays: 8,
-    status: "Passed",
-    consistency: 18,
-    consistencyThreshold: 30,
-    notes: "Waiting for funded account setup.",
-  },
-  {
-    id: "4",
-    firm: "Topstep",
-    accountName: "Topstep 50K",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 52100,
-    profitTarget: null,
-    maxDrawdown: 2000,
-    dailyLossLimit: 1000,
-    minTradingDays: 0,
-    completedTradingDays: 12,
-    status: "Funded",
-    consistency: 22,
-    consistencyThreshold: 30,
-    notes: "Keep daily losses under $1,000.",
-  },
-  {
-    id: "5",
-    firm: "Topstep",
-    accountName: "Topstep 150K",
-    accountSize: 150000,
-    startingBalance: 150000,
-    currentBalance: 153500,
-    profitTarget: null,
-    maxDrawdown: 6000,
-    dailyLossLimit: 3000,
-    minTradingDays: 0,
-    completedTradingDays: 24,
-    status: "Funded",
-    consistency: 19,
-    consistencyThreshold: 30,
-    notes: "",
-  },
-  {
-    id: "6",
-    firm: "Tradeify",
-    accountName: "Tradeify 25K",
-    accountSize: 25000,
-    startingBalance: 25000,
-    currentBalance: 23400,
-    profitTarget: 26500,
-    maxDrawdown: 1500,
-    dailyLossLimit: 500,
-    minTradingDays: 5,
-    completedTradingDays: 3,
-    status: "Breached",
-    consistency: null,
-    consistencyThreshold: 35,
-    notes: "Stopped out after news event.",
-  },
-  {
-    id: "7",
-    firm: "Tradeify",
-    accountName: "Tradeify 50K",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 50200,
-    profitTarget: 52500,
-    maxDrawdown: 2500,
-    dailyLossLimit: 1000,
-    minTradingDays: 5,
-    completedTradingDays: 1,
-    status: "In Eval",
-    consistency: 12,
-    consistencyThreshold: 35,
-    notes: "",
-  },
-];
+import { MOCK_EVAL_ACCOUNTS } from "@/lib/mock-data";
+import type { EvaluationAccount, EvaluationStatus } from "@/lib/types";
 
 // ── Filter tabs ────────────────────────────────────────────────────────────
 
 const FILTER_TABS = ["All", "Evaluation", "Funded", "Passed", "Breached"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
 
-function filterAccounts(accounts: EvalAccount[], filter: FilterTab): EvalAccount[] {
+function filterAccounts(accounts: EvaluationAccount[], filter: FilterTab): EvaluationAccount[] {
   switch (filter) {
     case "All":        return accounts;
     case "Evaluation": return accounts.filter((a) => a.status === "In Eval" || a.status === "Not Started");
@@ -168,7 +24,7 @@ function filterAccounts(accounts: EvalAccount[], filter: FilterTab): EvalAccount
 
 // ── Style maps ─────────────────────────────────────────────────────────────
 
-const STATUS_BADGE: Record<EvalStatus, string> = {
+const STATUS_BADGE: Record<EvaluationStatus, string> = {
   "Not Started": "text-muted-foreground bg-muted border-border",
   "In Eval":     "text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20",
   "Passed":      "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/20",
@@ -176,7 +32,7 @@ const STATUS_BADGE: Record<EvalStatus, string> = {
   "Breached":    "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/20",
 };
 
-const STATUS_DOT: Record<EvalStatus, string> = {
+const STATUS_DOT: Record<EvaluationStatus, string> = {
   "Not Started": "bg-muted-foreground",
   "In Eval":     "bg-blue-500",
   "Passed":      "bg-amber-500",
@@ -203,7 +59,7 @@ function fmtDiff(n: number): string {
   return n >= 0 ? `+${abs}` : `-${abs}`;
 }
 
-function calcProgress(account: EvalAccount): number | null {
+function calcProgress(account: EvaluationAccount): number | null {
   if (account.status === "Passed") return 100;
   if (account.status === "Funded" || account.status === "Breached") return null;
   if (!account.profitTarget) return null;
@@ -215,7 +71,7 @@ function calcProgress(account: EvalAccount): number | null {
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: EvalStatus }) {
+function StatusBadge({ status }: { status: EvaluationStatus }) {
   return (
     <span
       className={cn(
@@ -228,7 +84,7 @@ function StatusBadge({ status }: { status: EvalStatus }) {
   );
 }
 
-function AccountCard({ account }: { account: EvalAccount }) {
+function AccountCard({ account }: { account: EvaluationAccount }) {
   const progress = calcProgress(account);
   const balanceDiff = account.currentBalance - account.startingBalance;
   const isProfit = balanceDiff >= 0;
@@ -433,16 +289,14 @@ function AccountCard({ account }: { account: EvalAccount }) {
 export default function EvaluationsPage() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("All");
 
-  const filteredAccounts = filterAccounts(PLACEHOLDER_ACCOUNTS, activeFilter);
+  const filteredAccounts = filterAccounts(MOCK_EVAL_ACCOUNTS, activeFilter);
 
-  // Summary counts always reflect the full dataset regardless of active filter
-  const total    = PLACEHOLDER_ACCOUNTS.length;
-  const inEval   = PLACEHOLDER_ACCOUNTS.filter((a) => a.status === "In Eval").length;
-  const passed   = PLACEHOLDER_ACCOUNTS.filter((a) => a.status === "Passed").length;
-  const funded   = PLACEHOLDER_ACCOUNTS.filter((a) => a.status === "Funded").length;
-  const breached = PLACEHOLDER_ACCOUNTS.filter((a) => a.status === "Breached").length;
+  const total    = MOCK_EVAL_ACCOUNTS.length;
+  const inEval   = MOCK_EVAL_ACCOUNTS.filter((a) => a.status === "In Eval").length;
+  const passed   = MOCK_EVAL_ACCOUNTS.filter((a) => a.status === "Passed").length;
+  const funded   = MOCK_EVAL_ACCOUNTS.filter((a) => a.status === "Funded").length;
+  const breached = MOCK_EVAL_ACCOUNTS.filter((a) => a.status === "Breached").length;
 
-  // Pass rate: concluded accounts only (Passed + Funded + Breached)
   const concluded = passed + funded + breached;
   const passRate  = concluded > 0 ? Math.round(((passed + funded) / concluded) * 100) : null;
 
@@ -468,7 +322,7 @@ export default function EvaluationsPage() {
         </Link>
       </div>
 
-      {/* Summary strip — display-only, no interactive affordance */}
+      {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
         <div className="rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm cursor-default select-none">
           <p className="text-xs font-medium text-muted-foreground mb-2">Total Accounts</p>

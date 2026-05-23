@@ -32,98 +32,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-
-// ── Types ───────────────────────────────────────────────────────────────────
-
-type TradeOutcome = "Profit" | "Loss" | "Break even" | "Open";
-type TradeStatus = "Closed" | "Open";
-type TradeDirection = "Long" | "Short";
-
-interface PlaceholderTrade {
-  id: string;
-  date: string;
-  account: string;
-  instrument: string;
-  direction: TradeDirection;
-  setup: string;
-  outcome: TradeOutcome;
-  pnl: string;
-  rMultiple: string;
-  status: TradeStatus;
-}
-
-// ── Placeholder data ────────────────────────────────────────────────────────
-
-const PLACEHOLDER_TRADES: PlaceholderTrade[] = [
-  {
-    id: "1",
-    date: "May 16, 2026",
-    account: "Apex 50K #1",
-    instrument: "MNQ",
-    direction: "Long",
-    setup: "VWAP Bounce",
-    outcome: "Profit",
-    pnl: "+$250",
-    rMultiple: "+1.8R",
-    status: "Closed",
-  },
-  {
-    id: "2",
-    date: "May 16, 2026",
-    account: "Topstep 50K",
-    instrument: "MES",
-    direction: "Short",
-    setup: "Liquidity Sweep",
-    outcome: "Loss",
-    pnl: "-$90",
-    rMultiple: "-0.7R",
-    status: "Closed",
-  },
-  {
-    id: "3",
-    date: "May 15, 2026",
-    account: "Apex 50K #2",
-    instrument: "NQ",
-    direction: "Long",
-    setup: "FVG Continuation",
-    outcome: "Break even",
-    pnl: "$0",
-    rMultiple: "0.0R",
-    status: "Closed",
-  },
-  {
-    id: "4",
-    date: "May 15, 2026",
-    account: "Tradeify 25K",
-    instrument: "MNQ",
-    direction: "Short",
-    setup: "Rejection Block",
-    outcome: "Profit",
-    pnl: "+$180",
-    rMultiple: "+1.4R",
-    status: "Closed",
-  },
-  {
-    id: "5",
-    date: "May 14, 2026",
-    account: "Apex 50K #1",
-    instrument: "MES",
-    direction: "Long",
-    setup: "VWAP Reclaim",
-    outcome: "Open",
-    pnl: "Pending",
-    rMultiple: "Pending",
-    status: "Open",
-  },
-];
+import { formatPnl, formatR } from "@/lib/utils";
+import { MOCK_TRADES } from "@/lib/mock-data";
+import { INSTRUMENTS, SETUP_TAGS } from "@/lib/constants";
+import type { Trade, TradeOutcome, TradeDirection, TradeStatus } from "@/lib/types";
 
 // ── Style helpers ───────────────────────────────────────────────────────────
 
 const OUTCOME_BADGE: Record<TradeOutcome, string> = {
-  Profit:      "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20",
-  Loss:        "text-red-600    dark:text-red-400    bg-red-500/10    border border-red-500/20",
-  "Break even":"text-muted-foreground bg-muted border border-border",
-  Open:        "text-blue-600   dark:text-blue-400   bg-blue-500/10   border border-blue-500/20",
+  Profit:       "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20",
+  Loss:         "text-red-600    dark:text-red-400    bg-red-500/10    border border-red-500/20",
+  "Break even": "text-muted-foreground bg-muted border border-border",
+  Open:         "text-blue-600   dark:text-blue-400   bg-blue-500/10   border border-blue-500/20",
 };
 
 const DIRECTION_BADGE: Record<TradeDirection, string> = {
@@ -137,12 +57,13 @@ const STATUS_BADGE: Record<TradeStatus, string> = {
 };
 
 const PNL_TEXT: Record<TradeOutcome, string> = {
-  Profit:      "text-emerald-600 dark:text-emerald-400 font-semibold tabular-nums",
-  Loss:        "text-red-500    dark:text-red-400    font-semibold tabular-nums",
-  "Break even":"text-muted-foreground font-medium tabular-nums",
-  Open:        "text-muted-foreground tabular-nums",
+  Profit:       "text-emerald-600 dark:text-emerald-400 font-semibold tabular-nums",
+  Loss:         "text-red-500    dark:text-red-400    font-semibold tabular-nums",
+  "Break even": "text-muted-foreground font-medium tabular-nums",
+  Open:         "text-muted-foreground tabular-nums",
 };
 
+// ── Sort types ──────────────────────────────────────────────────────────────
 
 type SortKey = "date" | "account" | "setup" | "pnl" | "rMultiple";
 type SortDir = "asc" | "desc";
@@ -190,8 +111,19 @@ function SortHead({
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
-function pnlToNumber(pnl: string): number {
-  return parseFloat(pnl.replace(/[^0-9.-]/g, "")) * (pnl.startsWith("-") ? -1 : 1);
+function sortTrades(trades: Trade[], sortKey: SortKey | null, sortDir: SortDir): Trade[] {
+  if (!sortKey) return trades;
+  const dir = sortDir === "asc" ? 1 : -1;
+  return [...trades].sort((a, b) => {
+    switch (sortKey) {
+      case "date":      return dir * (new Date(a.date).getTime() - new Date(b.date).getTime());
+      case "account":   return dir * a.account.localeCompare(b.account);
+      case "setup":     return dir * a.setupType.localeCompare(b.setupType);
+      case "pnl":       return dir * ((a.pnl ?? -Infinity) - (b.pnl ?? -Infinity));
+      case "rMultiple": return dir * ((a.rMultiple ?? -Infinity) - (b.rMultiple ?? -Infinity));
+      default:          return 0;
+    }
+  });
 }
 
 export default function TradesPage() {
@@ -205,20 +137,18 @@ export default function TradesPage() {
     else { setSortKey(key); setSortDir("desc"); }
   }
 
-  const sortedTrades = [...PLACEHOLDER_TRADES].sort((a, b) => {
-    if (!sortKey) return 0;
-    const dir = sortDir === "asc" ? 1 : -1;
-    switch (sortKey) {
-      case "date":      return dir * (new Date(a.date).getTime() - new Date(b.date).getTime());
-      case "account":   return dir * a.account.localeCompare(b.account);
-      case "setup":     return dir * a.setup.localeCompare(b.setup);
-      case "pnl":       return dir * (pnlToNumber(a.pnl) - pnlToNumber(b.pnl));
-      case "rMultiple": return dir * (pnlToNumber(a.rMultiple) - pnlToNumber(b.rMultiple));
-      default:          return 0;
-    }
+  const filtered = MOCK_TRADES.filter((t) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      t.setupType.toLowerCase().includes(q) ||
+      t.account.toLowerCase().includes(q) ||
+      t.instrument.toLowerCase().includes(q)
+    );
   });
 
-  const hasTrades = PLACEHOLDER_TRADES.length > 0;
+  const sortedTrades = sortTrades(filtered, sortKey, sortDir);
+  const hasTrades = MOCK_TRADES.length > 0;
 
   return (
     <div className="p-6 md:p-8">
@@ -277,10 +207,9 @@ export default function TradesPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All instruments</SelectItem>
-              <SelectItem value="MES">MES</SelectItem>
-              <SelectItem value="MNQ">MNQ</SelectItem>
-              <SelectItem value="ES">ES</SelectItem>
-              <SelectItem value="NQ">NQ</SelectItem>
+              {INSTRUMENTS.map((inst) => (
+                <SelectItem key={inst} value={inst}>{inst}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -303,18 +232,9 @@ export default function TradesPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All setups</SelectItem>
-              <SelectItem value="vwap-bounce">VWAP Bounce</SelectItem>
-              <SelectItem value="vwap-reclaim">VWAP Reclaim</SelectItem>
-              <SelectItem value="liquidity-sweep">Liquidity Sweep</SelectItem>
-              <SelectItem value="fvg-continuation">FVG Continuation</SelectItem>
-              <SelectItem value="inverse-fvg">Inverse FVG</SelectItem>
-              <SelectItem value="rejection-block">Rejection Block</SelectItem>
-              <SelectItem value="breakout-retest">Breakout Retest</SelectItem>
-              <SelectItem value="failed-breakout">Failed Breakout</SelectItem>
-              <SelectItem value="trend-continuation">Trend Continuation</SelectItem>
-              <SelectItem value="reversal-trade">Reversal Trade</SelectItem>
-              <SelectItem value="news-trade">News Trade</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
+              {SETUP_TAGS.map((tag) => (
+                <SelectItem key={tag} value={tag.toLowerCase().replace(/\s+/g, "-")}>{tag}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -324,10 +244,9 @@ export default function TradesPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All accounts</SelectItem>
-              <SelectItem value="apex-50k-1">Apex 50K #1</SelectItem>
-              <SelectItem value="apex-50k-2">Apex 50K #2</SelectItem>
-              <SelectItem value="topstep-50k">Topstep 50K</SelectItem>
-              <SelectItem value="tradeify-25k">Tradeify 25K</SelectItem>
+              {Array.from(new Set(MOCK_TRADES.map((t) => t.account))).map((acc) => (
+                <SelectItem key={acc} value={acc.toLowerCase().replace(/\s+/g, "-")}>{acc}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -354,7 +273,7 @@ export default function TradesPage() {
           {/* Table meta bar */}
           <div className="px-5 py-3 border-b border-border">
             <p className="text-xs text-muted-foreground">
-              Showing <span className="font-medium text-foreground">5</span> of{" "}
+              Showing <span className="font-medium text-foreground">{sortedTrades.length}</span> of{" "}
               <span className="font-medium text-foreground">42</span> trades
             </p>
           </div>
@@ -416,7 +335,7 @@ export default function TradesPage() {
                   </TableCell>
 
                   <TableCell className="py-3.5 text-sm text-muted-foreground truncate">
-                    {trade.setup}
+                    {trade.setupType}
                   </TableCell>
 
                   <TableCell className="py-3.5">
@@ -432,7 +351,7 @@ export default function TradesPage() {
 
                   <TableCell className="py-3.5">
                     <span className={cn("text-sm", PNL_TEXT[trade.outcome])}>
-                      {trade.pnl}
+                      {formatPnl(trade.pnl)}
                     </span>
                   </TableCell>
 
@@ -446,7 +365,7 @@ export default function TradesPage() {
                           "text-muted-foreground font-normal"
                       )}
                     >
-                      {trade.rMultiple}
+                      {formatR(trade.rMultiple)}
                     </span>
                   </TableCell>
 
@@ -467,6 +386,7 @@ export default function TradesPage() {
                         href={`/trades/${trade.id}`}
                         title="View trade"
                         className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors inline-flex items-center justify-center"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <Eye size={14} />
                       </Link>
@@ -474,6 +394,7 @@ export default function TradesPage() {
                         href={`/trades/${trade.id}/edit`}
                         title="Edit trade"
                         className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <Pencil size={14} />
                       </Link>

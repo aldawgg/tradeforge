@@ -6,6 +6,19 @@ import { Plus, Trophy, ExternalLink } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { AccountGrowthChart } from "@/components/dashboard/account-growth-chart";
 import { cn } from "@/lib/utils";
+import {
+  MOCK_DASHBOARD_PERIOD_DATA,
+  MOCK_STREAK,
+  MOCK_BEST_SETUP,
+  MOCK_CONSISTENCY,
+  MOCK_TOTAL_PNL,
+  MOCK_TOTAL_BALANCE,
+  MOCK_TOTAL_BALANCE_CHANGE,
+  MOCK_TOTAL_BALANCE_PCT,
+  MOCK_TRACKED_ACCOUNT_COUNT,
+  MOCK_EVAL_ACCOUNTS,
+} from "@/lib/mock-data";
+import type { EvaluationStatus } from "@/lib/types";
 
 const PERIODS = ["1D", "1W", "1M", "YTD"] as const;
 type Period = (typeof PERIODS)[number];
@@ -17,46 +30,17 @@ const PERIOD_LABELS: Record<Period, string> = {
   "YTD": "Year to Date",
 };
 
-const PERIOD_DATA: Record<
-  Period,
-  {
-    pl: string;
-    plColor: "green" | "red" | "default";
-    winRate: string;
-    winRateSubtitle: string;
-    trades: string;
-  }
-> = {
-  "1D":  { pl: "+$250",   plColor: "green", winRate: "60%", winRateSubtitle: "3 of 5 trades",     trades: "5"   },
-  "1W":  { pl: "+$780",   plColor: "green", winRate: "55%", winRateSubtitle: "12 of 22 trades",   trades: "22"  },
-  "1M":  { pl: "+$2,150", plColor: "green", winRate: "58%", winRateSubtitle: "50 of 87 trades",   trades: "87"  },
-  "YTD": { pl: "+$8,400", plColor: "green", winRate: "52%", winRateSubtitle: "162 of 312 trades", trades: "312" },
-};
-
-const STREAK = {
-  type: "win" as "win" | "loss" | "none",
-  count: 4,
-};
-
-const EVAL_STATUSES = [
-  { label: "In Eval",  count: 3, dot: "bg-blue-500"    },
-  { label: "Passed",   count: 1, dot: "bg-amber-500"   },
-  { label: "Funded",   count: 2, dot: "bg-emerald-500" },
-  { label: "Breached", count: 1, dot: "bg-red-500"     },
+// Eval status widget config
+const EVAL_WIDGET_STATUSES: { label: string; status: EvaluationStatus; dot: string }[] = [
+  { label: "In Eval",  status: "In Eval",  dot: "bg-blue-500"    },
+  { label: "Passed",   status: "Passed",   dot: "bg-amber-500"   },
+  { label: "Funded",   status: "Funded",   dot: "bg-emerald-500" },
+  { label: "Breached", status: "Breached", dot: "bg-red-500"     },
 ];
-
-const CONSISTENCY = { value: 28, target: 30 };
-
-const BEST_SETUP = {
-  name: "VWAP Bounce",
-  winRate: 73,
-  trades: 15,
-  totalPnl: "+$1,840",
-};
 
 export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("1D");
-  const d = PERIOD_DATA[period];
+  const d = MOCK_DASHBOARD_PERIOD_DATA[period];
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -64,19 +48,19 @@ export default function DashboardPage() {
     day: "numeric",
   });
 
-  const isOverTarget = CONSISTENCY.value > CONSISTENCY.target;
+  const isOverTarget = MOCK_CONSISTENCY.value > MOCK_CONSISTENCY.target;
 
   const streakStyle = {
     win: {
       wrapper: "bg-emerald-500/10 border-emerald-500/20",
       value:   "text-emerald-600 dark:text-emerald-400",
-      text:    `🔥 ${STREAK.count} trade win streak`,
+      text:    `🔥 ${MOCK_STREAK.count} trade win streak`,
       hint:    "Keep following your plan",
     },
     loss: {
       wrapper: "bg-red-500/10 border-red-500/20",
       value:   "text-red-500 dark:text-red-400",
-      text:    `💔 ${STREAK.count} trade loss streak`,
+      text:    `💔 ${MOCK_STREAK.count} trade loss streak`,
       hint:    "Reduce size and reset mentally",
     },
     none: {
@@ -85,7 +69,7 @@ export default function DashboardPage() {
       text:    "No active streak",
       hint:    "Waiting for next closed trade",
     },
-  }[STREAK.type];
+  }[MOCK_STREAK.type];
 
   return (
     <div className="p-6 md:p-8">
@@ -132,7 +116,7 @@ export default function DashboardPage() {
             Total P/L
           </p>
           <p className="text-4xl font-bold text-emerald-600 tabular-nums leading-none">
-            +$8,400
+            {MOCK_TOTAL_PNL}
           </p>
           <p className="text-xs text-muted-foreground mt-2">All time</p>
         </div>
@@ -156,24 +140,24 @@ export default function DashboardPage() {
             <Trophy size={13} className="text-amber-500 shrink-0" />
           </div>
           <p className="text-2xl font-bold text-foreground leading-none mb-3 truncate">
-            {BEST_SETUP.name}
+            {MOCK_BEST_SETUP.name}
           </p>
           <div className="mb-2">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-muted-foreground">Win rate</span>
               <span className="text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                {BEST_SETUP.winRate}%
+                {MOCK_BEST_SETUP.winRate}%
               </span>
             </div>
             <div className="w-full h-1.5 bg-muted rounded-full">
               <div
                 className="h-full rounded-full bg-emerald-500"
-                style={{ width: `${BEST_SETUP.winRate}%` }}
+                style={{ width: `${MOCK_BEST_SETUP.winRate}%` }}
               />
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            {BEST_SETUP.trades} trades · {BEST_SETUP.totalPnl}
+            {MOCK_BEST_SETUP.trades} trades · {MOCK_BEST_SETUP.totalPnl}
           </p>
         </div>
 
@@ -241,17 +225,19 @@ export default function DashboardPage() {
               Total Account Balance
             </p>
             <p className="text-2xl font-bold text-foreground tabular-nums leading-none">
-              $154,250
+              ${MOCK_TOTAL_BALANCE.toLocaleString("en-US")}
             </p>
             <div className="flex items-center gap-2 mt-1.5">
               <span className="text-sm font-semibold text-emerald-600 tabular-nums">
-                +$4,250
+                +${MOCK_TOTAL_BALANCE_CHANGE.toLocaleString("en-US")}
               </span>
               <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-1.5 py-0.5 tabular-nums">
-                +2.83%
+                +{MOCK_TOTAL_BALANCE_PCT}%
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Across 4 tracked accounts</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Across {MOCK_TRACKED_ACCOUNT_COUNT} tracked accounts
+            </p>
           </div>
 
           {/* Consistency Score */}
@@ -271,7 +257,7 @@ export default function DashboardPage() {
                   isOverTarget ? "text-red-500" : "text-foreground"
                 )}
               >
-                {CONSISTENCY.value}%
+                {MOCK_CONSISTENCY.value}%
               </p>
               <span
                 className={cn(
@@ -290,18 +276,18 @@ export default function DashboardPage() {
                   "h-full rounded-full",
                   isOverTarget ? "bg-red-400" : "bg-emerald-500"
                 )}
-                style={{ width: `${CONSISTENCY.value}%` }}
+                style={{ width: `${MOCK_CONSISTENCY.value}%` }}
               />
             </div>
             <p className="text-xs text-muted-foreground">
               Largest winning day as % of total P/L
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Target: Under {CONSISTENCY.target}%
+              Target: Under {MOCK_CONSISTENCY.target}%
             </p>
           </div>
 
-          {/* Eval Status */}
+          {/* Eval Status — counts derived from MOCK_EVAL_ACCOUNTS */}
           <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -316,17 +302,20 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div className="space-y-2.5">
-              {EVAL_STATUSES.map((s) => (
-                <div key={s.label} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={cn("w-2 h-2 rounded-full shrink-0", s.dot)} />
-                    <span className="text-sm text-muted-foreground">{s.label}</span>
+              {EVAL_WIDGET_STATUSES.map((s) => {
+                const count = MOCK_EVAL_ACCOUNTS.filter((a) => a.status === s.status).length;
+                return (
+                  <div key={s.label} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("w-2 h-2 rounded-full shrink-0", s.dot)} />
+                      <span className="text-sm text-muted-foreground">{s.label}</span>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-foreground">
+                      {count}
+                    </span>
                   </div>
-                  <span className="text-sm font-semibold tabular-nums text-foreground">
-                    {s.count}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

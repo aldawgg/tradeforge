@@ -14,61 +14,29 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import {
+  MOCK_SETUP_STATS,
+  MOCK_INSTRUMENT_STATS,
+  MOCK_SESSION_STATS,
+  MOCK_MISTAKE_STATS,
+  MOCK_BEHAVIOUR_STATS,
+} from "@/lib/mock-data";
+import type { SetupStat, SessionStat, TagStat } from "@/lib/types";
 
-// ── Placeholder data ──────────────────────────────────────────────────────────
+// ── Period selector ───────────────────────────────────────────────────────────
 
 const PERIODS = ["1D", "1W", "1M", "YTD"] as const;
 type Period = (typeof PERIODS)[number];
 
-interface SetupRow    { name: string; trades: number; wins: number; pnl: number; avgR: number; }
-interface SessionRow  { name: string; trades: number; wins: number; pnl: number; avgR: number; }
-interface TagRow      { name: string; count: number;  pnl: number; }
+// ── Derived highlights ────────────────────────────────────────────────────────
 
-const SETUP_STATS: SetupRow[] = [
-  { name: "VWAP Bounce",      trades: 28, wins: 20, pnl:  1840, avgR:  1.4 },
-  { name: "Liquidity Sweep",  trades: 18, wins: 10, pnl:   620, avgR:  0.9 },
-  { name: "FVG Continuation", trades: 14, wins:  9, pnl:   540, avgR:  1.1 },
-  { name: "Rejection Block",  trades: 11, wins:  6, pnl:   210, avgR:  0.7 },
-  { name: "Failed Breakout",  trades:  8, wins:  2, pnl:  -380, avgR: -0.8 },
-];
+const bestSetupRow      = MOCK_SETUP_STATS.reduce((a, b) => b.pnl > a.pnl ? b : a);
+const bestInstrumentRow = MOCK_INSTRUMENT_STATS.reduce((a, b) => b.pnl > a.pnl ? b : a);
+const bestSessionRow    = MOCK_SESSION_STATS.reduce((a, b) => b.pnl > a.pnl ? b : a);
+const biggestMistakeRow = MOCK_MISTAKE_STATS.reduce((a, b) => b.count > a.count ? b : a);
 
-const INSTRUMENT_STATS: SetupRow[] = [
-  { name: "MNQ", trades: 48, wins: 31, pnl:  2640, avgR:  1.3 },
-  { name: "MES", trades: 22, wins: 12, pnl:   480, avgR:  0.8 },
-  { name: "NQ",  trades:  8, wins:  3, pnl:  -120, avgR: -0.4 },
-  { name: "ES",  trades:  5, wins:  2, pnl:   -60, avgR: -0.3 },
-];
-
-const SESSION_STATS: SessionRow[] = [
-  { name: "New York AM", trades: 42, wins: 27, pnl:  2340, avgR:  1.3 },
-  { name: "London",      trades: 18, wins:  9, pnl:   480, avgR:  0.7 },
-  { name: "New York PM", trades: 12, wins:  6, pnl:   120, avgR:  0.4 },
-  { name: "Asia",        trades:  6, wins:  2, pnl:  -210, avgR: -0.8 },
-  { name: "Other",       trades:  5, wins:  3, pnl:    90, avgR:  0.6 },
-];
-
-const MISTAKE_STATS: TagRow[] = [
-  { name: "Entered too early",     count: 8, pnl:  -520 },
-  { name: "Took profit too early", count: 6, pnl:  -250 },
-  { name: "FOMO entry",            count: 5, pnl:  -410 },
-  { name: "Moved stop loss",       count: 3, pnl:  -300 },
-  { name: "Overtraded",            count: 3, pnl:  -180 },
-];
-
-const BEHAVIOUR_STATS: TagRow[] = [
-  { name: "Respected stop loss",     count: 15, pnl:  760 },
-  { name: "Followed trading plan",   count: 12, pnl: 1200 },
-  { name: "Waited for confirmation", count:  9, pnl:  850 },
-  { name: "Managed emotions well",   count:  7, pnl:  430 },
-];
-
-const MISTAKE_MAX   = Math.max(...MISTAKE_STATS.map((m) => m.count));
-const BEHAVIOUR_MAX = Math.max(...BEHAVIOUR_STATS.map((b) => b.count));
-
-const bestSetupRow      = SETUP_STATS.reduce((a, b) => b.pnl > a.pnl ? b : a);
-const bestInstrumentRow = INSTRUMENT_STATS.reduce((a, b) => b.pnl > a.pnl ? b : a);
-const bestSessionRow    = SESSION_STATS.reduce((a, b) => b.pnl > a.pnl ? b : a);
-const biggestMistakeRow = MISTAKE_STATS.reduce((a, b) => b.count > a.count ? b : a);
+const MISTAKE_MAX   = Math.max(...MOCK_MISTAKE_STATS.map((m) => m.count));
+const BEHAVIOUR_MAX = Math.max(...MOCK_BEHAVIOUR_STATS.map((b) => b.count));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -220,7 +188,7 @@ function SetupSortHead({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function SessionTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
-  const d = SESSION_STATS.find((s) => s.name === label);
+  const d = MOCK_SESSION_STATS.find((s) => s.name === label);
   if (!d) return null;
   const wr = winRatePct(d.wins, d.trades);
   return (
@@ -278,7 +246,7 @@ export default function AnalyticsPage() {
     }
   }
 
-  const sortedSetups = [...SETUP_STATS].sort((a, b) => {
+  const sortedSetups = [...MOCK_SETUP_STATS].sort((a: SetupStat, b: SetupStat) => {
     if (!setupSortKey) return 0;
     let aVal: number, bVal: number;
     switch (setupSortKey) {
@@ -399,7 +367,7 @@ export default function AnalyticsPage() {
           <div className="h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={SESSION_STATS}
+                data={MOCK_SESSION_STATS}
                 margin={{ top: 4, right: 4, bottom: 0, left: 4 }}
                 barSize={36}
               >
@@ -433,7 +401,7 @@ export default function AnalyticsPage() {
                   cursor={{ fill: "var(--color-muted)", opacity: 0.5 }}
                 />
                 <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
-                  {SESSION_STATS.map((entry) => (
+                  {MOCK_SESSION_STATS.map((entry: SessionStat) => (
                     <Cell
                       key={entry.name}
                       fill={entry.pnl >= 0 ? "#10b981" : "#ef4444"}
@@ -450,14 +418,14 @@ export default function AnalyticsPage() {
         <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
           <SectionLabel>Instrument Performance</SectionLabel>
           <div>
-            {INSTRUMENT_STATS.map((row, i) => {
+            {MOCK_INSTRUMENT_STATS.map((row: SetupStat, i: number) => {
               const wr = winRatePct(row.wins, row.trades);
               return (
                 <div
                   key={row.name}
                   className={cn(
                     "py-3 flex flex-col gap-1.5",
-                    i < INSTRUMENT_STATS.length - 1 && "border-b border-border"
+                    i < MOCK_INSTRUMENT_STATS.length - 1 && "border-b border-border"
                   )}
                 >
                   <div className="flex items-center justify-between">
@@ -506,7 +474,7 @@ export default function AnalyticsPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedSetups.map((row, i) => {
+            {sortedSetups.map((row: SetupStat, i: number) => {
               const wr = winRatePct(row.wins, row.trades);
               return (
                 <tr
@@ -551,7 +519,7 @@ export default function AnalyticsPage() {
         <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
           <SectionLabel>Mistake Analysis</SectionLabel>
           <div className="space-y-3.5">
-            {MISTAKE_STATS.map((row) => (
+            {MOCK_MISTAKE_STATS.map((row: TagStat) => (
               <div key={row.name} className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-sm text-foreground truncate">{row.name}</span>
@@ -576,7 +544,7 @@ export default function AnalyticsPage() {
         <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
           <SectionLabel>Positive Behaviours</SectionLabel>
           <div className="space-y-3.5">
-            {BEHAVIOUR_STATS.map((row) => (
+            {MOCK_BEHAVIOUR_STATS.map((row: TagStat) => (
               <div key={row.name} className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-sm text-foreground truncate">{row.name}</span>

@@ -13,45 +13,18 @@ import {
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { cn } from "@/lib/utils";
+import { formatPnl, formatR, formatPrice, formatCurrency } from "@/lib/utils";
+import { MOCK_TRADES } from "@/lib/mock-data";
+import { POINT_VALUES } from "@/lib/constants";
+import type { Trade, TradeOutcome } from "@/lib/types";
 
-// ── Placeholder trade ───────────────────────────────────────────────────────
-
-const TRADE = {
-  id: "1",
-  instrument: "MNQ",
-  direction: "Long" as const,
-  setup: "VWAP Bounce",
-  account: "Apex 50K #1",
-  date: "May 16, 2026",
-  session: "New York AM",
-  outcome: "Profit" as const,
-  pnl: "+$250",
-  rMultiple: "+1.8R",
-  contracts: 2,
-  status: "Closed" as const,
-  entryPrice: "21,450.25",
-  exitPrice: "21,487.50",
-  stopLoss: "21,425.00",
-  target: "21,500.00",
-  riskPoints: "25.25",
-  riskDollars: "$101",
-  rewardCaptured: "37.25",
-  rewardDollars: "$149",
-  wentWell: [
-    "Waited for confirmation",
-    "Followed trading plan",
-    "Respected stop loss",
-  ],
-  couldImprove: ["Took profit slightly early"],
-  notes:
-    "Clean VWAP bounce after liquidity sweep. Entry was patient, but exit could have been held closer to target.",
-};
+// Use the first mock trade as the placeholder detail record.
+// When Supabase is connected, this will be fetched by ID from the URL params.
+const TRADE: Trade = MOCK_TRADES[0];
 
 // ── Types & style maps ──────────────────────────────────────────────────────
 
-type Outcome = "Profit" | "Loss" | "Break even" | "Open";
-
-const OUTCOME_BADGE: Record<Outcome, string> = {
+const OUTCOME_BADGE: Record<TradeOutcome, string> = {
   Profit:       "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
   Loss:         "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/20",
   "Break even": "text-muted-foreground bg-muted border-border",
@@ -60,7 +33,7 @@ const OUTCOME_BADGE: Record<Outcome, string> = {
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function OutcomeBadge({ outcome }: { outcome: Outcome }) {
+function OutcomeBadge({ outcome }: { outcome: TradeOutcome }) {
   return (
     <span
       className={cn(
@@ -155,6 +128,17 @@ function UnitToggle({
 export default function TradeDetailPage() {
   const [showDollars, setShowDollars] = useState(false);
 
+  const trade = TRADE;
+  const pointValue = POINT_VALUES[trade.instrument] ?? 1;
+
+  const riskPts  = Math.abs(trade.entryPrice - trade.stopLoss);
+  const riskUsd  = riskPts * pointValue * trade.contracts;
+
+  const rewardPts = trade.exitPrice != null
+    ? Math.abs(trade.exitPrice - trade.entryPrice)
+    : 0;
+  const rewardUsd = rewardPts * pointValue * trade.contracts;
+
   return (
     <div className="p-6 md:p-8">
 
@@ -174,12 +158,12 @@ export default function TradeDetailPage() {
         <div>
           <div className="flex items-center gap-3 mb-1.5">
             <h1 className="text-xl font-semibold text-foreground">
-              {TRADE.instrument} {TRADE.direction} — {TRADE.setup}
+              {trade.instrument} {trade.direction} — {trade.setupType}
             </h1>
-            <OutcomeBadge outcome={TRADE.outcome} />
+            <OutcomeBadge outcome={trade.outcome} />
           </div>
           <p className="text-sm text-muted-foreground">
-            {TRADE.account} · {TRADE.date} · {TRADE.session}
+            {trade.account} · {trade.date} · {trade.session}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -191,7 +175,7 @@ export default function TradeDetailPage() {
             Duplicate
           </button>
           <Link
-            href="/trades/1/edit"
+            href={`/trades/${trade.id}/edit`}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <Pencil size={13} />
@@ -200,22 +184,22 @@ export default function TradeDetailPage() {
         </div>
       </div>
 
-      {/* Key result cards — outcome/direction/status already in header */}
+      {/* Key result cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="P/L"
-          value={TRADE.pnl}
-          valueColor="green"
+          value={formatPnl(trade.pnl)}
+          valueColor={trade.outcome === "Profit" ? "green" : trade.outcome === "Loss" ? "red" : "default"}
         />
         <StatCard
           label="R-Multiple"
-          value={TRADE.rMultiple}
-          valueColor="green"
+          value={formatR(trade.rMultiple)}
+          valueColor={trade.outcome === "Profit" ? "green" : trade.outcome === "Loss" ? "red" : "default"}
           subtitle="Profit or loss vs. risk taken"
         />
         <StatCard
           label="Risk"
-          value={showDollars ? TRADE.riskDollars : `${TRADE.riskPoints} pts`}
+          value={showDollars ? formatCurrency(riskUsd) : `${riskPts.toFixed(2)} pts`}
           subtitle="Entry to stop loss distance"
           action={
             <UnitToggle
@@ -226,7 +210,7 @@ export default function TradeDetailPage() {
         />
         <StatCard
           label="Contracts"
-          value={String(TRADE.contracts)}
+          value={String(trade.contracts)}
         />
       </div>
 
@@ -236,67 +220,77 @@ export default function TradeDetailPage() {
         {/* Left: main content (2/3) */}
         <div className="lg:col-span-2 flex flex-col gap-6">
 
-          {/* Trade Reflection — first because this is a journal */}
+          {/* Trade Reflection */}
           <div className="rounded-xl border border-border bg-card px-5 py-5 shadow-sm">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-5">
               Trade Reflection
             </p>
 
-            <div className="mb-5">
-              <div className="flex items-center gap-1.5 mb-3">
-                <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                <p className="text-sm font-semibold text-foreground">What went well</p>
+            {trade.positiveTags.length > 0 && (
+              <div className="mb-5">
+                <div className="flex items-center gap-1.5 mb-3">
+                  <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+                  <p className="text-sm font-semibold text-foreground">What went well</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {trade.positiveTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {TRADE.wentWell.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
+            )}
 
-            <div className="mb-5 pb-5 border-b border-border">
-              <div className="flex items-center gap-1.5 mb-3">
-                <AlertCircle size={14} className="text-amber-500 shrink-0" />
-                <p className="text-sm font-semibold text-foreground">What could improve</p>
+            {trade.mistakeTags.length > 0 && (
+              <div className="mb-5 pb-5 border-b border-border">
+                <div className="flex items-center gap-1.5 mb-3">
+                  <AlertCircle size={14} className="text-amber-500 shrink-0" />
+                  <p className="text-sm font-semibold text-foreground">What could improve</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {trade.mistakeTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {TRADE.couldImprove.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
+            )}
 
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2.5">
-                Notes
-              </p>
-              <p className="text-sm text-foreground leading-relaxed bg-muted/40 rounded-lg px-4 py-3 border border-border">
-                {TRADE.notes}
-              </p>
-            </div>
+            {trade.notes && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2.5">
+                  Notes
+                </p>
+                <p className="text-sm text-foreground leading-relaxed bg-muted/40 rounded-lg px-4 py-3 border border-border">
+                  {trade.notes}
+                </p>
+              </div>
+            )}
+
+            {!trade.positiveTags.length && !trade.mistakeTags.length && !trade.notes && (
+              <p className="text-sm text-muted-foreground">No reflection added yet.</p>
+            )}
           </div>
 
-          {/* Trade Context — simplified, no fields already in header */}
+          {/* Trade Context */}
           <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
               Trade Context
             </p>
             <ContextRow label="Instrument">
-              <span className="font-semibold">{TRADE.instrument}</span>
+              <span className="font-semibold">{trade.instrument}</span>
             </ContextRow>
-            <ContextRow label="Setup">{TRADE.setup}</ContextRow>
-            <ContextRow label="Session">{TRADE.session}</ContextRow>
-            <ContextRow label="Account">{TRADE.account}</ContextRow>
+            <ContextRow label="Setup">{trade.setupType}</ContextRow>
+            <ContextRow label="Session">{trade.session}</ContextRow>
+            <ContextRow label="Account">{trade.account}</ContextRow>
           </div>
 
           {/* Screenshots */}
@@ -335,10 +329,13 @@ export default function TradeDetailPage() {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
               Price Details
             </p>
-            <PriceRow label="Entry price" value={TRADE.entryPrice} />
-            <PriceRow label="Exit price"  value={TRADE.exitPrice}  />
-            <PriceRow label="Stop loss"   value={TRADE.stopLoss}   />
-            <PriceRow label="Target"      value={TRADE.target}     />
+            <PriceRow label="Entry price" value={formatPrice(trade.entryPrice)} />
+            <PriceRow
+              label="Exit price"
+              value={trade.exitPrice != null ? formatPrice(trade.exitPrice) : "Pending"}
+            />
+            <PriceRow label="Stop loss" value={formatPrice(trade.stopLoss)} />
+            <PriceRow label="Target"    value={formatPrice(trade.target)}   />
 
             <div className="mt-3 pt-3 border-t border-border">
               <div className="flex items-center justify-between mb-1">
@@ -353,14 +350,20 @@ export default function TradeDetailPage() {
               <PriceRow
                 label="Risk"
                 hint="Entry to stop loss distance"
-                value={showDollars ? TRADE.riskDollars : `${TRADE.riskPoints} pts`}
+                value={showDollars ? formatCurrency(riskUsd) : `${riskPts.toFixed(2)} pts`}
                 color="red"
               />
               <PriceRow
                 label="Reward captured"
                 hint="Actual move from entry to exit"
-                value={showDollars ? TRADE.rewardDollars : `${TRADE.rewardCaptured} pts`}
-                color="green"
+                value={
+                  trade.exitPrice != null
+                    ? showDollars
+                      ? formatCurrency(rewardUsd)
+                      : `${rewardPts.toFixed(2)} pts`
+                    : "Pending"
+                }
+                color={trade.exitPrice != null ? "green" : undefined}
               />
             </div>
           </div>
