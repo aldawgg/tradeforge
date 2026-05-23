@@ -25,11 +25,15 @@ alter table profiles enable row level security;
 
 create policy "Users can view their own profile"
   on profiles for select
-  using (auth.uid() = id);
+  using ((select auth.uid()) = id);
+
+create policy "Users can insert their own profile"
+  on profiles for insert
+  with check ((select auth.uid()) = id);
 
 create policy "Users can update their own profile"
   on profiles for update
-  using (auth.uid() = id);
+  using ((select auth.uid()) = id);
 
 -- Trigger: keep updated_at current
 create or replace function set_updated_at()
@@ -44,11 +48,17 @@ create trigger profiles_updated_at
   before update on profiles
   for each row execute procedure set_updated_at();
 
--- Trigger: auto-create profile row on signup
-create or replace function handle_new_user()
-returns trigger language plpgsql security definer as $$
+-- Trigger: auto-create profile row on signup.
+-- set search_path = '' is required for security definer functions in Supabase
+-- so that the empty search path forces fully-qualified table names (public.profiles).
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
 begin
-  insert into profiles (id, email)
+  insert into public.profiles (id, email)
   values (new.id, new.email)
   on conflict (id) do nothing;
   return new;
@@ -57,7 +67,7 @@ $$;
 
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure handle_new_user();
+  for each row execute procedure public.handle_new_user();
 
 
 -- ── evaluation_accounts ──────────────────────────────────────

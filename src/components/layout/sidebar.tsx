@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -15,8 +15,10 @@ import {
   ChevronDown,
   List,
   CalendarDays,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 const TOP_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -40,11 +42,31 @@ function handleThemeToggle() {
   } catch {}
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  userName?: string;
+  userEmail?: string;
+}
+
+export function Sidebar({ userName, userEmail }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const tradesActive = pathname.startsWith("/trades");
   const [tradesOpen, setTradesOpen] = useState(tradesActive);
   const tradesExpanded = tradesOpen || tradesActive;
+
+  const displayName = userName || userEmail || "";
+  const initials = userName
+    ? userName.trim().charAt(0).toUpperCase()
+    : userEmail
+    ? userEmail.charAt(0).toUpperCase()
+    : "?";
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <aside className="w-60 shrink-0 border-r border-sidebar-border bg-sidebar h-screen sticky top-0 flex flex-col">
@@ -58,6 +80,7 @@ export function Sidebar() {
           </span>
         </div>
       </div>
+
       <nav className="flex-1 p-3 space-y-0.5">
         {TOP_NAV.map((item) => {
           const Icon = item.icon;
@@ -154,6 +177,25 @@ export function Sidebar() {
           <span className="hidden dark:block">Light mode</span>
         </button>
       </nav>
+
+      {/* User area at the bottom */}
+      <div className="p-3 border-t border-sidebar-border space-y-0.5">
+        <div className="flex items-center gap-3 px-3 py-2">
+          <div className="flex items-center justify-center w-7 h-7 rounded-full bg-sidebar-accent text-sidebar-accent-foreground text-xs font-semibold shrink-0">
+            {initials}
+          </div>
+          <span className="text-xs text-sidebar-foreground/70 truncate flex-1">
+            {displayName}
+          </span>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+        >
+          <LogOut size={16} />
+          Sign out
+        </button>
+      </div>
     </aside>
   );
 }
