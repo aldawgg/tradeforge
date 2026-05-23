@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -332,10 +334,10 @@ const EMPTY_FORM_BASE: Omit<FormState, "date"> = {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function AddTradePage() {
+  const router = useRouter();
+
   const [form, setFormState] = useState<FormState>(() => {
     const base: FormState = { ...EMPTY_FORM_BASE, date: getToday() };
-    // Read saved defaults from sessionStorage. The try/catch handles both SSR
-    // (where sessionStorage is undefined) and disabled/private-browsing contexts.
     try {
       const raw = sessionStorage.getItem("tradeforge_defaults");
       if (raw) {
@@ -356,14 +358,15 @@ export default function AddTradePage() {
     } catch {}
     return base;
   });
+
   const [errors, setErrors] = useState<FormErrors>({});
-  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setFormState((prev) => {
       const next = { ...prev, [key]: value };
-      // Clear outcome when switching to Open — outcome only applies to Closed trades
       if (key === "tradeStatus" && value === "Open") {
         next.outcome = "";
       }
@@ -372,12 +375,12 @@ export default function AddTradePage() {
     setErrors((prev) => {
       const next = { ...prev };
       if (key in next) delete next[key as keyof FormErrors];
-      // Clear related conditional field errors
       if (key === "instrument") delete next.customInstrument;
       if (key === "setup") delete next.customSetup;
       if (key === "tradeStatus") delete next.outcome;
       return next;
     });
+    if (saveError) setSaveError("");
   }
 
   function toggleAccount(account: string) {
@@ -430,7 +433,6 @@ export default function AddTradePage() {
       e.outcome = "Outcome is required for closed trades";
     }
 
-    // Contracts optional — only validate format if entered
     if (
       form.contracts.trim() &&
       (isNaN(Number(form.contracts)) || Number(form.contracts) <= 0)
@@ -438,7 +440,6 @@ export default function AddTradePage() {
       e.contracts = "Must be greater than 0";
     }
 
-    // Advanced cross-field: only trigger if entry + the other field are both filled
     if (form.direction && form.entryPrice && form.stopLoss) {
       const entry = Number(form.entryPrice);
       const sl = Number(form.stopLoss);
@@ -468,16 +469,17 @@ export default function AddTradePage() {
     return e;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
-      if (errs.stopLoss || errs.target) {
-        setShowAdvanced(true);
-      }
+      if (errs.stopLoss || errs.target) setShowAdvanced(true);
       return;
     }
+
+    // Persist defaults so the next trade pre-fills common fields
     try {
       sessionStorage.setItem(
         "tradeforge_defaults",
@@ -489,7 +491,61 @@ export default function AddTradePage() {
         })
       );
     } catch {}
-    setSubmitted(true);
+
+    setSaving(true);
+    setSaveError("");
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      setSaveError("You must be logged in to save a trade.");
+      setSaving(false);
+      return;
+    }
+
+    const isCustomInstrument = form.instrument === "Other / Custom";
+    const isCustomSetup = form.setup === "Other / Custom";
+    const isOpen = form.tradeStatus === "Open";
+
+    const payload = {
+      user_id: user.id,
+      account_id: null,           // will be wired when eval accounts connect to trades
+      date: form.date,
+      instrument: isCustomInstrument ? "Custom" : form.instrument,
+      custom_instrument: isCustomInstrument ? form.customInstrument.trim() : null,
+      direction: form.direction,
+      session: form.session,
+      setup: isCustomSetup ? "Custom" : form.setup,
+      custom_setup: isCustomSetup ? form.customSetup.trim() : null,
+      status: form.tradeStatus,
+      // Open trades always have outcome = "Open"; closed trades use the selected outcome
+      outcome: isOpen ? "Open" : form.outcome,
+      // P/L and R are nullable — null when not entered or trade is open
+      pnl: !isOpen && form.pl.trim() ? Number(form.pl) : null,
+      r_multiple: !isOpen && form.rMultiple.trim() ? Number(form.rMultiple) : null,
+      contracts: form.contracts.trim() ? Number(form.contracts) : 1,
+      positive_review_tags: form.positiveTags,
+      improvement_tags: form.improvements,
+      notes: form.notes,
+      // Price fields: DB columns are NOT NULL so default to 0 when left blank.
+      // The user can fill them in later when an edit form is available.
+      entry_price: form.entryPrice.trim() ? Number(form.entryPrice) : 0,
+      exit_price: form.exitPrice.trim() ? Number(form.exitPrice) : null,
+      stop_loss: form.stopLoss.trim() ? Number(form.stopLoss) : 0,
+      target: form.target.trim() ? Number(form.target) : 0,
+    };
+
+    const { error: insertError } = await supabase.from("trades").insert(payload);
+
+    if (insertError) {
+      setSaveError(insertError.message);
+      setSaving(false);
+      return;
+    }
+
+    // Success — go to trade history
+    router.push("/trades");
   }
 
   const today = new Date().toLocaleDateString("en-US", {
@@ -499,59 +555,6 @@ export default function AddTradePage() {
   });
 
   const isOpen = form.tradeStatus === "Open";
-
-  // ── Success screen ─────────────────────────────────────────────────────
-
-  if (submitted) {
-    return (
-      <div className="p-6 md:p-8 max-w-3xl mx-auto">
-        <div className="rounded-xl border border-border bg-card px-6 py-10 shadow-sm text-center">
-          <p className="text-lg font-semibold text-foreground mb-1.5">
-            Trade logged
-          </p>
-          <p
-            className={cn(
-              "text-sm text-muted-foreground",
-              isOpen ? "mb-2" : "mb-6"
-            )}
-          >
-            Saved to your journal. Supabase connection coming soon.
-          </p>
-          {isOpen && (
-            <p className="text-xs text-muted-foreground mb-6">
-              Update the outcome and P/L when this trade closes.
-            </p>
-          )}
-          <div className="flex items-center justify-center gap-3">
-            <Link
-              href="/dashboard"
-              className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              Back to Dashboard
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setFormState((prev) => ({
-                  ...EMPTY_FORM_BASE,
-                  date: getToday(),
-                  instrument: prev.instrument,
-                  customInstrument: prev.customInstrument,
-                  session: prev.session,
-                  direction: prev.direction,
-                }));
-                setSubmitted(false);
-                setErrors({});
-              }}
-              className="px-4 py-2 text-sm font-medium border border-border text-foreground rounded-lg hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-            >
-              Log another trade
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // ── Form ───────────────────────────────────────────────────────────────
 
@@ -621,7 +624,7 @@ export default function AddTradePage() {
             </FieldGroup>
           </div>
 
-          {/* Custom instrument — only visible when Other / Custom is selected */}
+          {/* Custom instrument */}
           {form.instrument === "Other / Custom" && (
             <div className="mt-4">
               <FieldGroup
@@ -753,7 +756,7 @@ export default function AddTradePage() {
             </FieldGroup>
           </div>
 
-          {/* Custom setup — only visible when Other / Custom is selected */}
+          {/* Custom setup */}
           {form.setup === "Other / Custom" && (
             <div className="mt-4">
               <FieldGroup
@@ -804,7 +807,7 @@ export default function AddTradePage() {
               </div>
             </FieldGroup>
 
-            {/* Outcome — only shown when trade is Closed */}
+            {/* Outcome — only shown for Closed trades */}
             {form.tradeStatus === "Closed" && (
               <FieldGroup label="Outcome" error={errors.outcome} required>
                 <div className="flex gap-2">
@@ -830,7 +833,6 @@ export default function AddTradePage() {
               </FieldGroup>
             )}
 
-            {/* Helper text when Open */}
             {form.tradeStatus === "Open" && (
               <p className="text-xs text-muted-foreground">
                 Outcome can be added once the trade is closed.
@@ -1035,19 +1037,27 @@ export default function AddTradePage() {
         </AdvancedSection>
 
         {/* ── Footer ────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between pt-4 pb-6">
-          <Link
-            href="/dashboard"
-            className="px-4 py-2 text-sm font-medium border border-border text-muted-foreground rounded-lg hover:bg-accent hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            className="px-5 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            Save Trade
-          </button>
+        <div className="flex flex-col gap-3 pt-4 pb-6">
+          {saveError && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+              {saveError}
+            </p>
+          )}
+          <div className="flex items-center justify-between">
+            <Link
+              href="/dashboard"
+              className="px-4 py-2 text-sm font-medium border border-border text-muted-foreground rounded-lg hover:bg-accent hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+            >
+              Cancel
+            </Link>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {saving ? "Saving..." : "Save Trade"}
+            </button>
+          </div>
         </div>
 
       </form>
