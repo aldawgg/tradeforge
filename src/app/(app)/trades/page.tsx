@@ -245,6 +245,7 @@ export default function TradesPage() {
   const [instrumentFilter, setInstrumentFilter] = useState("all");
   const [outcomeFilter, setOutcomeFilter] = useState("all");
   const [setupFilter, setSetupFilter] = useState("all");
+  const [accountFilter, setAccountFilter] = useState("all");
   const [dateRangeFilter, setDateRangeFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey | null>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -347,12 +348,16 @@ export default function TradesPage() {
       return false;
     if (outcomeFilter !== "all" && t.outcome !== outcomeFilter) return false;
     if (setupFilter !== "all" && t.setupType !== setupFilter) return false;
+    if (accountFilter !== "all" && t.account !== accountFilter) return false;
     if (dateRangeFilter !== "all" && !isInDateRange(t.date, dateRangeFilter))
       return false;
     return true;
   });
 
   const sortedTrades = sortTrades(filtered, sortKey, sortDir);
+
+  // Unique account names derived from loaded trades for the account filter dropdown
+  const uniqueAccounts = [...new Set(trades.map((t) => t.account))].sort();
 
   // ── Summary stats (computed from all loaded trades, not just filtered) ──
   const closedTrades = trades.filter((t) => t.status === "Closed");
@@ -511,13 +516,15 @@ export default function TradesPage() {
             </SelectContent>
           </Select>
 
-          {/* Account filter — decorative until eval accounts are linked to trades */}
-          <Select>
+          <Select value={accountFilter} onValueChange={setAccountFilter}>
             <SelectTrigger className="w-40 h-8 text-sm">
               <SelectValue placeholder="Account" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All accounts</SelectItem>
+              {uniqueAccounts.map((acc) => (
+                <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -555,6 +562,7 @@ export default function TradesPage() {
             setInstrumentFilter("all");
             setOutcomeFilter("all");
             setSetupFilter("all");
+            setAccountFilter("all");
             setDateRangeFilter("all");
           }}
         />
