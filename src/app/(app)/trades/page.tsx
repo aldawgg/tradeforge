@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,6 +13,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Input } from "@/components/ui/input";
@@ -33,8 +35,8 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatPnl, formatR } from "@/lib/utils";
-import { MOCK_TRADES } from "@/lib/mock-data";
 import { INSTRUMENTS, SETUP_TAGS } from "@/lib/constants";
+import { createClient } from "@/lib/supabase/client";
 import type { Trade, TradeOutcome, TradeDirection, TradeStatus } from "@/lib/types";
 
 // ── Style helpers ───────────────────────────────────────────────────────────
@@ -68,6 +70,91 @@ const PNL_TEXT: Record<TradeOutcome, string> = {
 type SortKey = "date" | "account" | "setup" | "pnl" | "rMultiple";
 type SortDir = "asc" | "desc";
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+// Format ISO date "2026-05-16" → "May 16, 2026"
+function formatTradeDate(isoDate: string): string {
+  return new Date(isoDate + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+// Format total P/L for summary cards
+function formatSummaryPnl(pnl: number): string {
+  if (pnl === 0) return "$0";
+  const abs = Math.abs(pnl).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+  return pnl > 0 ? `+$${abs}` : `-$${abs}`;
+}
+
+function formatSummaryR(r: number): string {
+  if (r === 0) return "0.0R";
+  return (r > 0 ? "+" : "") + r.toFixed(1) + "R";
+}
+
+function isInDateRange(isoDate: string, range: string): boolean {
+  const tradeDate = new Date(isoDate + "T00:00:00");
+  const now = new Date();
+  switch (range) {
+    case "today":
+      return tradeDate.toDateString() === now.toDateString();
+    case "this-week": {
+      const start = new Date(now);
+      start.setDate(now.getDate() - now.getDay());
+      start.setHours(0, 0, 0, 0);
+      return tradeDate >= start;
+    }
+    case "this-month":
+      return (
+        tradeDate.getMonth() === now.getMonth() &&
+        tradeDate.getFullYear() === now.getFullYear()
+      );
+    case "this-year":
+      return tradeDate.getFullYear() === now.getFullYear();
+    default:
+      return true;
+  }
+}
+
+// Map a raw Supabase row to the Trade interface shape
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRow(row: any): Trade {
+  const instrument: string =
+    row.instrument === "Custom"
+      ? (row.custom_instrument ?? "Custom")
+      : row.instrument;
+  const setupType: string =
+    row.setup === "Custom"
+      ? (row.custom_setup ?? "Custom")
+      : row.setup;
+  return {
+    id: row.id as string,
+    date: row.date as string,         // stored as ISO "YYYY-MM-DD"
+    account: "Unassigned",            // account_id not yet wired to eval accounts
+    instrument,
+    direction: row.direction as TradeDirection,
+    session: row.session,
+    entryPrice: Number(row.entry_price),
+    exitPrice: row.exit_price != null ? Number(row.exit_price) : null,
+    stopLoss: Number(row.stop_loss),
+    target: Number(row.target),
+    contracts: Number(row.contracts),
+    setupType,
+    mistakeTags: (row.improvement_tags as string[]) ?? [],
+    positiveTags: (row.positive_review_tags as string[]) ?? [],
+    notes: (row.notes as string) ?? "",
+    screenshots: [],
+    pnl: row.pnl != null ? Number(row.pnl) : null,
+    rMultiple: row.r_multiple != null ? Number(row.r_multiple) : null,
+    outcome: row.outcome as TradeOutcome,
+    status: row.status as TradeStatus,
+  };
+}
+
 // ── Sortable column header ──────────────────────────────────────────────────
 
 function SortHead({
@@ -86,7 +173,11 @@ function SortHead({
   onSort: (k: SortKey) => void;
 }) {
   const isActive = activeKey === sortKey;
-  const Icon = isActive ? (activeDir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  const Icon = isActive
+    ? activeDir === "asc"
+      ? ArrowUp
+      : ArrowDown
+    : ArrowUpDown;
   return (
     <TableHead
       className={cn(
@@ -109,46 +200,168 @@ function SortHead({
   );
 }
 
-// ── Page ────────────────────────────────────────────────────────────────────
+// ── Sort logic ──────────────────────────────────────────────────────────────
 
-function sortTrades(trades: Trade[], sortKey: SortKey | null, sortDir: SortDir): Trade[] {
+function sortTrades(
+  trades: Trade[],
+  sortKey: SortKey | null,
+  sortDir: SortDir
+): Trade[] {
   if (!sortKey) return trades;
   const dir = sortDir === "asc" ? 1 : -1;
   return [...trades].sort((a, b) => {
     switch (sortKey) {
-      case "date":      return dir * (new Date(a.date).getTime() - new Date(b.date).getTime());
-      case "account":   return dir * a.account.localeCompare(b.account);
-      case "setup":     return dir * a.setupType.localeCompare(b.setupType);
-      case "pnl":       return dir * ((a.pnl ?? -Infinity) - (b.pnl ?? -Infinity));
-      case "rMultiple": return dir * ((a.rMultiple ?? -Infinity) - (b.rMultiple ?? -Infinity));
-      default:          return 0;
+      case "date":
+        return dir * (new Date(a.date).getTime() - new Date(b.date).getTime());
+      case "account":
+        return dir * a.account.localeCompare(b.account);
+      case "setup":
+        return dir * a.setupType.localeCompare(b.setupType);
+      case "pnl":
+        return dir * ((a.pnl ?? -Infinity) - (b.pnl ?? -Infinity));
+      case "rMultiple":
+        return dir * ((a.rMultiple ?? -Infinity) - (b.rMultiple ?? -Infinity));
+      default:
+        return 0;
     }
   });
 }
 
+// ── Page ────────────────────────────────────────────────────────────────────
+
 export default function TradesPage() {
   const router = useRouter();
+
+  // ── Data state ──────────────────────────────────────────────────────────
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
+
+  // ── UI state ────────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [instrumentFilter, setInstrumentFilter] = useState("all");
+  const [outcomeFilter, setOutcomeFilter] = useState("all");
+  const [setupFilter, setSetupFilter] = useState("all");
+  const [dateRangeFilter, setDateRangeFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<SortKey | null>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // ── Fetch trades on mount ────────────────────────────────────────────────
+  useEffect(() => {
+    async function fetchTrades() {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("trades")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("date", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setFetchError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setTrades((data ?? []).map((row: any) => mapRow(row)));
+      setLoading(false);
+    }
+
+    fetchTrades();
+  }, [router]);
+
+  // ── Sort handler ─────────────────────────────────────────────────────────
   function handleSort(key: SortKey) {
-    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("desc"); }
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
   }
 
-  const filtered = MOCK_TRADES.filter((t) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      t.setupType.toLowerCase().includes(q) ||
-      t.account.toLowerCase().includes(q) ||
-      t.instrument.toLowerCase().includes(q)
-    );
+  // ── Filter logic ─────────────────────────────────────────────────────────
+  const filtered = trades.filter((t) => {
+    if (search) {
+      const q = search.toLowerCase();
+      if (
+        !t.setupType.toLowerCase().includes(q) &&
+        !t.account.toLowerCase().includes(q) &&
+        !t.instrument.toLowerCase().includes(q)
+      )
+        return false;
+    }
+    if (instrumentFilter !== "all" && t.instrument !== instrumentFilter)
+      return false;
+    if (outcomeFilter !== "all" && t.outcome !== outcomeFilter) return false;
+    if (setupFilter !== "all" && t.setupType !== setupFilter) return false;
+    if (dateRangeFilter !== "all" && !isInDateRange(t.date, dateRangeFilter))
+      return false;
+    return true;
   });
 
   const sortedTrades = sortTrades(filtered, sortKey, sortDir);
-  const hasTrades = MOCK_TRADES.length > 0;
+
+  // ── Summary stats (computed from all loaded trades, not just filtered) ──
+  const closedTrades = trades.filter((t) => t.status === "Closed");
+  const wins = closedTrades.filter((t) => t.outcome === "Profit");
+  const losses = closedTrades.filter((t) => t.outcome === "Loss");
+  const totalPnl = closedTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+  const decisiveCount = wins.length + losses.length;
+  const winRate =
+    decisiveCount > 0 ? Math.round((wins.length / decisiveCount) * 100) : 0;
+  const rValues = closedTrades
+    .filter((t) => t.rMultiple != null)
+    .map((t) => t.rMultiple!);
+  const avgR =
+    rValues.length > 0
+      ? rValues.reduce((sum, r) => sum + r, 0) / rValues.length
+      : 0;
+
+  // ── Render states ────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 size={22} className="text-muted-foreground animate-spin" />
+        <p className="text-sm text-muted-foreground">Loading trades...</p>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <AlertCircle size={22} className="text-destructive" />
+        <p className="text-sm font-medium text-foreground">
+          Failed to load trades
+        </p>
+        <p className="text-sm text-muted-foreground max-w-xs text-center">
+          {fetchError}
+        </p>
+        <button
+          onClick={() => {
+            setFetchError("");
+            setLoading(true);
+            // re-mount effect by forcing a page refresh
+            router.refresh();
+          }}
+          className="mt-1 text-sm text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8">
@@ -156,7 +369,9 @@ export default function TradesPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Trade History</h1>
+          <h1 className="text-xl font-semibold text-foreground">
+            Trade History
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Review, filter, and analyse your logged trades.
           </p>
@@ -172,10 +387,21 @@ export default function TradesPage() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total Trades" value="42" />
-        <StatCard label="Total P/L" value="+$8,400" valueColor="green" />
-        <StatCard label="Win Rate" value="60%" />
-        <StatCard label="Average R" value="+1.2R" valueColor="green" />
+        <StatCard label="Total Trades" value={String(trades.length)} />
+        <StatCard
+          label="Total P/L"
+          value={formatSummaryPnl(totalPnl)}
+          valueColor={totalPnl > 0 ? "green" : totalPnl < 0 ? "red" : "default"}
+        />
+        <StatCard
+          label="Win Rate"
+          value={decisiveCount > 0 ? `${winRate}%` : "—"}
+        />
+        <StatCard
+          label="Average R"
+          value={rValues.length > 0 ? formatSummaryR(avgR) : "—"}
+          valueColor={avgR > 0 ? "green" : avgR < 0 ? "red" : "default"}
+        />
       </div>
 
       {/* Filters */}
@@ -201,56 +427,58 @@ export default function TradesPage() {
             />
           </div>
 
-          <Select>
+          <Select value={instrumentFilter} onValueChange={setInstrumentFilter}>
             <SelectTrigger className="w-36 h-8 text-sm">
               <SelectValue placeholder="Instrument" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All instruments</SelectItem>
               {INSTRUMENTS.map((inst) => (
-                <SelectItem key={inst} value={inst}>{inst}</SelectItem>
+                <SelectItem key={inst} value={inst}>
+                  {inst}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Select>
+          <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
             <SelectTrigger className="w-32 h-8 text-sm">
               <SelectValue placeholder="Outcome" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All outcomes</SelectItem>
-              <SelectItem value="profit">Profit</SelectItem>
-              <SelectItem value="loss">Loss</SelectItem>
-              <SelectItem value="breakeven">Break even</SelectItem>
-              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="Profit">Profit</SelectItem>
+              <SelectItem value="Loss">Loss</SelectItem>
+              <SelectItem value="Break even">Break even</SelectItem>
+              <SelectItem value="Open">Open</SelectItem>
             </SelectContent>
           </Select>
 
-          <Select>
+          <Select value={setupFilter} onValueChange={setSetupFilter}>
             <SelectTrigger className="w-44 h-8 text-sm">
               <SelectValue placeholder="Setup" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All setups</SelectItem>
               {SETUP_TAGS.map((tag) => (
-                <SelectItem key={tag} value={tag.toLowerCase().replace(/\s+/g, "-")}>{tag}</SelectItem>
+                <SelectItem key={tag} value={tag}>
+                  {tag}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
+          {/* Account filter — decorative until eval accounts are linked to trades */}
           <Select>
             <SelectTrigger className="w-40 h-8 text-sm">
               <SelectValue placeholder="Account" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All accounts</SelectItem>
-              {Array.from(new Set(MOCK_TRADES.map((t) => t.account))).map((acc) => (
-                <SelectItem key={acc} value={acc.toLowerCase().replace(/\s+/g, "-")}>{acc}</SelectItem>
-              ))}
             </SelectContent>
           </Select>
 
-          <Select>
+          <Select value={dateRangeFilter} onValueChange={setDateRangeFilter}>
             <SelectTrigger className="w-36 h-8 text-sm">
               <SelectValue placeholder="Date range" />
             </SelectTrigger>
@@ -267,14 +495,33 @@ export default function TradesPage() {
       </div>
 
       {/* Table or empty state */}
-      {hasTrades ? (
+      {trades.length === 0 ? (
+        <EmptyState />
+      ) : sortedTrades.length === 0 ? (
+        <NoResults
+          onClear={() => {
+            setSearch("");
+            setInstrumentFilter("all");
+            setOutcomeFilter("all");
+            setSetupFilter("all");
+            setDateRangeFilter("all");
+          }}
+        />
+      ) : (
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
 
           {/* Table meta bar */}
           <div className="px-5 py-3 border-b border-border">
             <p className="text-xs text-muted-foreground">
-              Showing <span className="font-medium text-foreground">{sortedTrades.length}</span> of{" "}
-              <span className="font-medium text-foreground">42</span> trades
+              Showing{" "}
+              <span className="font-medium text-foreground">
+                {sortedTrades.length}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium text-foreground">
+                {trades.length}
+              </span>{" "}
+              trades
             </p>
           </div>
 
@@ -289,12 +536,12 @@ export default function TradesPage() {
                 <TableHead className="w-[8%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Direction
                 </TableHead>
-                <SortHead className="w-[17%]"       sortKey="setup"     activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Setup</SortHead>
+                <SortHead className="w-[17%]" sortKey="setup" activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Setup</SortHead>
                 <TableHead className="w-[10%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Outcome
                 </TableHead>
-                <SortHead className="w-[10%]"       sortKey="pnl"       activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>P/L</SortHead>
-                <SortHead className="w-[9%]"        sortKey="rMultiple" activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>R</SortHead>
+                <SortHead className="w-[10%]" sortKey="pnl"       activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>P/L</SortHead>
+                <SortHead className="w-[9%]"  sortKey="rMultiple" activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>R</SortHead>
                 <TableHead className="w-[8%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Status
                 </TableHead>
@@ -310,7 +557,7 @@ export default function TradesPage() {
                   onClick={() => router.push(`/trades/${trade.id}`)}
                 >
                   <TableCell className="pl-5 py-3.5 text-sm text-foreground font-medium">
-                    {trade.date}
+                    {formatTradeDate(trade.date)}
                   </TableCell>
 
                   <TableCell className="py-3.5 text-sm text-muted-foreground truncate">
@@ -359,9 +606,12 @@ export default function TradesPage() {
                     <span
                       className={cn(
                         "text-sm tabular-nums font-medium",
-                        trade.outcome === "Profit" && "text-emerald-600 dark:text-emerald-400",
-                        trade.outcome === "Loss"   && "text-red-500 dark:text-red-400",
-                        (trade.outcome === "Break even" || trade.outcome === "Open") &&
+                        trade.outcome === "Profit" &&
+                          "text-emerald-600 dark:text-emerald-400",
+                        trade.outcome === "Loss" &&
+                          "text-red-500 dark:text-red-400",
+                        (trade.outcome === "Break even" ||
+                          trade.outcome === "Open") &&
                           "text-muted-foreground font-normal"
                       )}
                     >
@@ -400,7 +650,6 @@ export default function TradesPage() {
                       </Link>
                     </div>
                   </TableCell>
-
                 </TableRow>
               ))}
             </TableBody>
@@ -409,20 +658,22 @@ export default function TradesPage() {
           {/* Table footer */}
           <div className="px-5 py-3 border-t border-border bg-muted/20">
             <p className="text-xs text-muted-foreground">
-              Showing <span className="font-medium text-foreground">{sortedTrades.length}</span> trades
+              Showing{" "}
+              <span className="font-medium text-foreground">
+                {sortedTrades.length}
+              </span>{" "}
+              trades
             </p>
           </div>
 
         </div>
-      ) : (
-        <EmptyState />
       )}
 
     </div>
   );
 }
 
-// ── Empty state ─────────────────────────────────────────────────────────────
+// ── Empty state (no trades at all) ──────────────────────────────────────────
 
 function EmptyState() {
   return (
@@ -434,7 +685,8 @@ function EmptyState() {
         No trades logged yet
       </h3>
       <p className="text-sm text-muted-foreground mb-6 max-w-xs">
-        Start by logging your first trade to begin tracking your performance and building your journal.
+        Start by logging your first trade to begin tracking your performance and
+        building your journal.
       </p>
       <Link
         href="/trades/new"
@@ -443,6 +695,30 @@ function EmptyState() {
         <Plus size={14} />
         Log Trade
       </Link>
+    </div>
+  );
+}
+
+// ── No results (trades exist but filters exclude all of them) ───────────────
+
+function NoResults({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-card shadow-sm px-6 py-16 flex flex-col items-center text-center">
+      <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-muted mb-4">
+        <Search size={20} className="text-muted-foreground" />
+      </div>
+      <h3 className="text-sm font-semibold text-foreground mb-1">
+        No trades match your filters
+      </h3>
+      <p className="text-sm text-muted-foreground mb-5 max-w-xs">
+        Try adjusting the filters or search query.
+      </p>
+      <button
+        onClick={onClear}
+        className="text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
+      >
+        Clear all filters
+      </button>
     </div>
   );
 }

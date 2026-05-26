@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Pencil,
@@ -10,19 +11,16 @@ import {
   CheckCircle2,
   AlertCircle,
   UploadCloud,
+  Loader2,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { cn } from "@/lib/utils";
 import { formatPnl, formatR, formatPrice, formatCurrency } from "@/lib/utils";
-import { MOCK_TRADES } from "@/lib/mock-data";
 import { POINT_VALUES } from "@/lib/constants";
-import type { Trade, TradeOutcome } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+import type { Trade, TradeOutcome, TradeDirection, TradeStatus, TradingSession } from "@/lib/types";
 
-// Use the first mock trade as the placeholder detail record.
-// When Supabase is connected, this will be fetched by ID from the URL params.
-const TRADE: Trade = MOCK_TRADES[0];
-
-// ── Types & style maps ──────────────────────────────────────────────────────
+// ── Style maps ──────────────────────────────────────────────────────────────
 
 const OUTCOME_BADGE: Record<TradeOutcome, string> = {
   Profit:       "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
@@ -30,6 +28,52 @@ const OUTCOME_BADGE: Record<TradeOutcome, string> = {
   "Break even": "text-muted-foreground bg-muted border-border",
   Open:         "text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20",
 };
+
+// ── Row mapper ──────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRow(row: any): Trade {
+  const instrument: string =
+    row.instrument === "Custom"
+      ? (row.custom_instrument ?? "Custom")
+      : row.instrument;
+  const setupType: string =
+    row.setup === "Custom"
+      ? (row.custom_setup ?? "Custom")
+      : row.setup;
+  return {
+    id: row.id as string,
+    date: row.date as string,
+    account: "Unassigned",
+    instrument,
+    direction: row.direction as TradeDirection,
+    session: row.session as TradingSession,
+    entryPrice: Number(row.entry_price),
+    exitPrice: row.exit_price != null ? Number(row.exit_price) : null,
+    stopLoss: Number(row.stop_loss),
+    target: Number(row.target),
+    contracts: Number(row.contracts),
+    setupType,
+    mistakeTags: (row.improvement_tags as string[]) ?? [],
+    positiveTags: (row.positive_review_tags as string[]) ?? [],
+    notes: (row.notes as string) ?? "",
+    screenshots: [],
+    pnl: row.pnl != null ? Number(row.pnl) : null,
+    rMultiple: row.r_multiple != null ? Number(row.r_multiple) : null,
+    outcome: row.outcome as TradeOutcome,
+    status: row.status as TradeStatus,
+  };
+}
+
+// ── Date formatter ──────────────────────────────────────────────────────────
+
+function formatTradeDate(isoDate: string): string {
+  return new Date(isoDate + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
@@ -126,17 +170,115 @@ function UnitToggle({
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function TradeDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id as string;
+
+  const [trade, setTrade] = useState<Trade | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
+  const [notFound, setNotFound] = useState(false);
   const [showDollars, setShowDollars] = useState(false);
 
-  const trade = TRADE;
+  useEffect(() => {
+    async function fetchTrade() {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("trades")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .single();
+
+      if (error) {
+        // PGRST116 = no rows returned — trade not found or belongs to another user
+        if (error.code === "PGRST116") {
+          setNotFound(true);
+        } else {
+          setFetchError(error.message);
+        }
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+
+      setTrade(mapRow(data));
+      setLoading(false);
+    }
+
+    fetchTrade();
+  }, [id, router]);
+
+  // ── Loading state ────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 size={22} className="text-muted-foreground animate-spin" />
+        <p className="text-sm text-muted-foreground">Loading trade...</p>
+      </div>
+    );
+  }
+
+  // ── Error state ──────────────────────────────────────────────────────────
+
+  if (fetchError) {
+    return (
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <AlertCircle size={22} className="text-destructive" />
+        <p className="text-sm font-medium text-foreground">Failed to load trade</p>
+        <p className="text-sm text-muted-foreground max-w-xs text-center">
+          {fetchError}
+        </p>
+        <Link
+          href="/trades"
+          className="mt-1 text-sm text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
+        >
+          Back to Trade History
+        </Link>
+      </div>
+    );
+  }
+
+  // ── Not found state ──────────────────────────────────────────────────────
+
+  if (notFound || !trade) {
+    return (
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <p className="text-sm font-medium text-foreground">Trade not found.</p>
+        <Link
+          href="/trades"
+          className="text-sm text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
+        >
+          Back to Trade History
+        </Link>
+      </div>
+    );
+  }
+
+  // ── Trade loaded ─────────────────────────────────────────────────────────
+
   const pointValue = POINT_VALUES[trade.instrument] ?? 1;
 
-  const riskPts  = Math.abs(trade.entryPrice - trade.stopLoss);
-  const riskUsd  = riskPts * pointValue * trade.contracts;
+  const riskPts = Math.abs(trade.entryPrice - trade.stopLoss);
+  const riskUsd = riskPts * pointValue * trade.contracts;
 
-  const rewardPts = trade.exitPrice != null
-    ? Math.abs(trade.exitPrice - trade.entryPrice)
-    : 0;
+  const rewardPts =
+    trade.exitPrice != null ? Math.abs(trade.exitPrice - trade.entryPrice) : 0;
   const rewardUsd = rewardPts * pointValue * trade.contracts;
 
   return (
@@ -163,7 +305,7 @@ export default function TradeDetailPage() {
             <OutcomeBadge outcome={trade.outcome} />
           </div>
           <p className="text-sm text-muted-foreground">
-            {trade.account} · {trade.date} · {trade.session}
+            {trade.account} · {formatTradeDate(trade.date)} · {trade.session}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -188,13 +330,25 @@ export default function TradeDetailPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="P/L"
-          value={formatPnl(trade.pnl)}
-          valueColor={trade.outcome === "Profit" ? "green" : trade.outcome === "Loss" ? "red" : "default"}
+          value={trade.pnl != null ? formatPnl(trade.pnl) : "Pending"}
+          valueColor={
+            trade.outcome === "Profit"
+              ? "green"
+              : trade.outcome === "Loss"
+              ? "red"
+              : "default"
+          }
         />
         <StatCard
           label="R-Multiple"
-          value={formatR(trade.rMultiple)}
-          valueColor={trade.outcome === "Profit" ? "green" : trade.outcome === "Loss" ? "red" : "default"}
+          value={trade.rMultiple != null ? formatR(trade.rMultiple) : "Pending"}
+          valueColor={
+            trade.outcome === "Profit"
+              ? "green"
+              : trade.outcome === "Loss"
+              ? "red"
+              : "default"
+          }
           subtitle="Profit or loss vs. risk taken"
         />
         <StatCard
