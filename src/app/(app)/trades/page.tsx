@@ -16,6 +16,8 @@ import {
   ArrowDown,
   Loader2,
   AlertCircle,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Input } from "@/components/ui/input";
@@ -134,8 +136,8 @@ function mapRow(row: any): Trade {
       : row.setup;
   return {
     id: row.id as string,
-    date: row.date as string,         // stored as ISO "YYYY-MM-DD"
-    account: "Unassigned",            // account_id not yet wired to eval accounts
+    date: row.date as string,
+    account: (row.evaluation_accounts as { account_name: string } | null)?.account_name ?? "Unassigned",
     instrument,
     direction: row.direction as TradeDirection,
     session: row.session,
@@ -267,7 +269,7 @@ export default function TradesPage() {
 
       const { data, error } = await supabase
         .from("trades")
-        .select("*")
+        .select("*, evaluation_accounts(account_name)")
         .eq("user_id", user.id)
         .order("date", { ascending: false })
         .order("created_at", { ascending: false });
@@ -622,10 +624,13 @@ export default function TradesPage() {
                   <TableCell className="py-3.5">
                     <span
                       className={cn(
-                        "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium",
+                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium",
                         DIRECTION_BADGE[trade.direction]
                       )}
                     >
+                      {trade.direction === "Long"
+                        ? <TrendingUp size={11} />
+                        : <TrendingDown size={11} />}
                       {trade.direction}
                     </span>
                   </TableCell>

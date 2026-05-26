@@ -40,7 +40,7 @@ function rowToFormState(row: any): FormState {
 
   return {
     date: row.date ?? "",
-    accounts: [],             // account_id not yet linked to named accounts
+    accounts: row.account_id ? [row.account_id as string] : [],
     instrument,
     customInstrument,
     direction: (row.direction ?? "") as "Long" | "Short" | "",
@@ -89,6 +89,7 @@ export default function EditTradePage() {
   const [loadError, setLoadError] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [availableAccounts, setAvailableAccounts] = useState<{ id: string; name: string }[]>([]);
 
   // ── Save state ─────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
@@ -107,32 +108,45 @@ export default function EditTradePage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("trades")
-        .select("*")
-        .eq("id", id)
-        .eq("user_id", user.id)
-        .single();
+      const [tradeResult, accountsResult] = await Promise.all([
+        supabase
+          .from("trades")
+          .select("*")
+          .eq("id", id)
+          .eq("user_id", user.id)
+          .single(),
+        supabase
+          .from("evaluation_accounts")
+          .select("id, account_name")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true }),
+      ]);
 
-      if (error) {
+      if (tradeResult.error) {
         // PGRST116 = no rows returned — trade not found or belongs to another user
-        if (error.code === "PGRST116") {
+        if (tradeResult.error.code === "PGRST116") {
           setNotFound(true);
         } else {
-          setLoadError(error.message);
+          setLoadError(tradeResult.error.message);
         }
         setLoading(false);
         return;
       }
 
-      if (!data) {
+      if (!tradeResult.data) {
         setNotFound(true);
         setLoading(false);
         return;
       }
 
-      setInitialValues(rowToFormState(data));
-      setSubtitle(buildSubtitle(data));
+      if (accountsResult.data) {
+        setAvailableAccounts(
+          accountsResult.data.map((row) => ({ id: row.id, name: row.account_name }))
+        );
+      }
+
+      setInitialValues(rowToFormState(tradeResult.data));
+      setSubtitle(buildSubtitle(tradeResult.data));
       setLoading(false);
     }
 
@@ -161,6 +175,7 @@ export default function EditTradePage() {
 
     const payload = {
       date: form.date,
+      account_id: form.accounts[0] ?? null,
       instrument: isCustomInstrument ? "Custom" : form.instrument,
       custom_instrument: isCustomInstrument ? form.customInstrument.trim() : null,
       direction: form.direction,
@@ -255,6 +270,7 @@ export default function EditTradePage() {
       saving={saving}
       saveError={saveError}
       onSave={handleSave}
+      availableAccounts={availableAccounts}
     />
   );
 }

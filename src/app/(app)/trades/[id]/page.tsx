@@ -13,6 +13,8 @@ import {
   AlertCircle,
   UploadCloud,
   Loader2,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { cn } from "@/lib/utils";
@@ -45,7 +47,7 @@ function mapRow(row: any): Trade {
   return {
     id: row.id as string,
     date: row.date as string,
-    account: "Unassigned",
+    account: (row.evaluation_accounts as { account_name: string } | null)?.account_name ?? "Unassigned",
     instrument,
     direction: row.direction as TradeDirection,
     session: row.session as TradingSession,
@@ -77,6 +79,23 @@ function formatTradeDate(isoDate: string): string {
 }
 
 // ── Sub-components ──────────────────────────────────────────────────────────
+
+function DirectionBadge({ direction }: { direction: TradeDirection }) {
+  const isLong = direction === "Long";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold border",
+        isLong
+          ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+          : "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/20"
+      )}
+    >
+      {isLong ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+      {direction}
+    </span>
+  );
+}
 
 function OutcomeBadge({ outcome }: { outcome: TradeOutcome }) {
   return (
@@ -200,7 +219,7 @@ export default function TradeDetailPage() {
 
       const { data, error } = await supabase
         .from("trades")
-        .select("*")
+        .select("*, evaluation_accounts(account_name)")
         .eq("id", id)
         .eq("user_id", user.id)
         .single();
@@ -338,8 +357,9 @@ export default function TradeDetailPage() {
         <div>
           <div className="flex items-center gap-3 mb-1.5">
             <h1 className="text-xl font-semibold text-foreground">
-              {trade.instrument} {trade.direction} — {trade.setupType}
+              {trade.instrument} — {trade.setupType}
             </h1>
+            <DirectionBadge direction={trade.direction} />
             <OutcomeBadge outcome={trade.outcome} />
           </div>
           <p className="text-sm text-muted-foreground">
@@ -521,6 +541,9 @@ export default function TradeDetailPage() {
             </p>
             <ContextRow label="Instrument">
               <span className="font-semibold">{trade.instrument}</span>
+            </ContextRow>
+            <ContextRow label="Direction">
+              <DirectionBadge direction={trade.direction} />
             </ContextRow>
             <ContextRow label="Setup">{trade.setupType}</ContextRow>
             <ContextRow label="Session">{trade.session}</ContextRow>

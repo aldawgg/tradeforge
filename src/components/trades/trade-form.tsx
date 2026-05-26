@@ -19,12 +19,7 @@ import { cn } from "@/lib/utils";
 
 export const INSTRUMENTS = ["MES", "MNQ", "ES", "NQ", "Other / Custom"] as const;
 export const SESSIONS = ["Asia", "London", "New York AM", "New York PM", "Other"] as const;
-export const ACCOUNTS = [
-  "Apex 50K #1",
-  "Apex 50K #2",
-  "Topstep 50K",
-  "Tradeify 25K",
-] as const;
+export const ACCOUNTS = [] as const;
 export const SETUPS = [
   "VWAP bounce",
   "VWAP reclaim",
@@ -391,6 +386,8 @@ export interface TradeFormProps {
   saving: boolean;
   saveError: string;
   onSave: (values: FormState) => Promise<void>;
+  /** Real evaluation accounts fetched from Supabase. */
+  availableAccounts?: { id: string; name: string }[];
 }
 
 export function TradeForm({
@@ -402,6 +399,7 @@ export function TradeForm({
   saving,
   saveError,
   onSave,
+  availableAccounts = [],
 }: TradeFormProps) {
   const backHref = mode === "create" ? "/dashboard" : `/trades/${tradeId}`;
 
@@ -417,6 +415,18 @@ export function TradeForm({
     setFormState((prev) => {
       const next = { ...prev, [key]: value };
       if (key === "tradeStatus" && value === "Open") next.outcome = "";
+      // When the user picks Profit or Loss, snap existing P/L and R signs to match.
+      if (key === "outcome" && (value === "Profit" || value === "Loss")) {
+        const sign = value === "Loss" ? -1 : 1;
+        if (prev.pl.trim()) {
+          const num = Number(prev.pl);
+          if (!isNaN(num) && num !== 0) next.pl = String(Math.abs(num) * sign);
+        }
+        if (prev.rMultiple.trim()) {
+          const num = Number(prev.rMultiple);
+          if (!isNaN(num) && num !== 0) next.rMultiple = String(Math.abs(num) * sign);
+        }
+      }
       return next;
     });
     setErrors((prev) => {
@@ -429,12 +439,10 @@ export function TradeForm({
     });
   }
 
-  function toggleAccount(account: string) {
+  function toggleAccount(id: string) {
     setFormState((prev) => ({
       ...prev,
-      accounts: prev.accounts.includes(account)
-        ? prev.accounts.filter((a) => a !== account)
-        : [...prev.accounts, account],
+      accounts: prev.accounts.includes(id) ? [] : [id],
     }));
   }
 
@@ -556,25 +564,37 @@ export function TradeForm({
             <FieldGroup
               label="Account"
               error={errors.accounts}
-              hint="Select all accounts this trade was taken on."
+              hint={availableAccounts.length > 0 ? "Select the account this trade was taken on." : undefined}
             >
               <div className="flex flex-wrap gap-2 mt-0.5">
-                {ACCOUNTS.map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    aria-pressed={form.accounts.includes(a)}
-                    onClick={() => toggleAccount(a)}
-                    className={cn(
-                      "px-2.5 py-1 text-xs font-medium rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                      form.accounts.includes(a)
-                        ? "bg-primary/10 border-primary/40 text-primary"
-                        : "border-input text-muted-foreground hover:text-foreground hover:bg-accent"
-                    )}
-                  >
-                    {a}
-                  </button>
-                ))}
+                {availableAccounts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No evaluation accounts found.{" "}
+                    <Link
+                      href="/evaluations/new"
+                      className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+                    >
+                      Add one in the Evaluation Tracker.
+                    </Link>
+                  </p>
+                ) : (
+                  availableAccounts.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      aria-pressed={form.accounts.includes(a.id)}
+                      onClick={() => toggleAccount(a.id)}
+                      className={cn(
+                        "px-2.5 py-1 text-xs font-medium rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                        form.accounts.includes(a.id)
+                          ? "bg-primary/10 border-primary/40 text-primary"
+                          : "border-input text-muted-foreground hover:text-foreground hover:bg-accent"
+                      )}
+                    >
+                      {a.name}
+                    </button>
+                  ))
+                )}
               </div>
             </FieldGroup>
           </div>
@@ -785,6 +805,13 @@ export function TradeForm({
                   placeholder="e.g. 125.00"
                   value={form.pl}
                   onChange={(e) => setField("pl", e.target.value)}
+                  onBlur={() => {
+                    if (!form.pl.trim() || !form.outcome || form.outcome === "Break even") return;
+                    const num = Number(form.pl);
+                    if (isNaN(num) || num === 0) return;
+                    if (form.outcome === "Profit" && num < 0) setField("pl", String(-num));
+                    if (form.outcome === "Loss"   && num > 0) setField("pl", String(-num));
+                  }}
                   disabled={isOpen}
                   className="no-spin"
                 />
@@ -806,6 +833,13 @@ export function TradeForm({
                   placeholder="e.g. 1.5"
                   value={form.rMultiple}
                   onChange={(e) => setField("rMultiple", e.target.value)}
+                  onBlur={() => {
+                    if (!form.rMultiple.trim() || !form.outcome || form.outcome === "Break even") return;
+                    const num = Number(form.rMultiple);
+                    if (isNaN(num) || num === 0) return;
+                    if (form.outcome === "Profit" && num < 0) setField("rMultiple", String(-num));
+                    if (form.outcome === "Loss"   && num > 0) setField("rMultiple", String(-num));
+                  }}
                   disabled={isOpen}
                 />
               </FieldGroup>

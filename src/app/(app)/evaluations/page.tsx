@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, Pencil, Trash2, Loader2, AlertCircle, CheckCircle2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MOCK_EVAL_ACCOUNTS } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/client";
 import type { EvaluationAccount, EvaluationStatus } from "@/lib/types";
 
 // ── Filter tabs ────────────────────────────────────────────────────────────
@@ -69,6 +70,30 @@ function calcProgress(account: EvaluationAccount): number | null {
   return Math.min(100, Math.max(0, (gained / range) * 100));
 }
 
+// ── Row mapper ─────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRow(row: any): EvaluationAccount {
+  return {
+    id: row.id as string,
+    firm: row.prop_firm_name as string,
+    accountName: row.account_name as string,
+    accountSize: Number(row.account_size),
+    startingBalance: Number(row.starting_balance),
+    currentBalance: Number(row.current_balance),
+    profitTarget: row.profit_target != null ? Number(row.profit_target) : null,
+    maxDrawdown: Number(row.max_drawdown),
+    dailyLossLimit: Number(row.daily_loss_limit),
+    minTradingDays: Number(row.minimum_trading_days),
+    completedTradingDays: Number(row.completed_trading_days),
+    status: row.status as EvaluationStatus,
+    consistency: row.consistency != null ? Number(row.consistency) : null,
+    consistencyThreshold:
+      row.consistency_threshold != null ? Number(row.consistency_threshold) : null,
+    notes: (row.notes as string) ?? "",
+  };
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: EvaluationStatus }) {
@@ -84,8 +109,65 @@ function StatusBadge({ status }: { status: EvaluationStatus }) {
   );
 }
 
-function AccountCard({ account }: { account: EvaluationAccount }) {
+interface AccountCardProps {
+  account: EvaluationAccount;
+  confirmDelete: boolean;
+  confirmFunded: boolean;
+  deleting: boolean;
+  updatingStatus: boolean;
+  onDeleteRequest: () => void;
+  onDeleteConfirm: () => void;
+  onDeleteCancel: () => void;
+  onMarkPassed: () => void;
+  onMarkBreached: () => void;
+  onMarkFundedRequest: () => void;
+  onMarkFundedConfirm: () => void;
+  onMarkFundedCancel: () => void;
+}
+
+function AccountCard({
+  account,
+  confirmDelete,
+  confirmFunded,
+  deleting,
+  updatingStatus,
+  onDeleteRequest,
+  onDeleteConfirm,
+  onDeleteCancel,
+  onMarkPassed,
+  onMarkBreached,
+  onMarkFundedRequest,
+  onMarkFundedConfirm,
+  onMarkFundedCancel,
+}: AccountCardProps) {
   const progress = calcProgress(account);
+
+  // ── Status suggestion logic ──────────────────────────────────────────────
+  const passBalanceReached =
+    account.profitTarget !== null &&
+    account.currentBalance >= account.profitTarget;
+  const passDaysReached =
+    account.minTradingDays === 0 ||
+    account.completedTradingDays >= account.minTradingDays;
+  const showPassSuggestion =
+    passBalanceReached &&
+    passDaysReached &&
+    account.status !== "Passed" &&
+    account.status !== "Funded" &&
+    account.status !== "Breached";
+
+  const breachLevel =
+    account.maxDrawdown > 0
+      ? account.startingBalance - account.maxDrawdown
+      : null;
+  const showBreachSuggestion =
+    breachLevel !== null &&
+    account.currentBalance <= breachLevel &&
+    account.status !== "Breached";
+
+  const showFundedTransition = account.status === "Passed";
+
+  const hasSuggestions = showPassSuggestion || showBreachSuggestion || showFundedTransition;
   const balanceDiff = account.currentBalance - account.startingBalance;
   const isProfit = balanceDiff >= 0;
   const threshold = account.consistencyThreshold ?? 30;
@@ -112,13 +194,23 @@ function AccountCard({ account }: { account: EvaluationAccount }) {
                 <StatusBadge status={account.status} />
               </div>
             </div>
-            <Link
-              href={`/evaluations/${account.id}/edit`}
-              title="Edit account"
-              className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
-            >
-              <Pencil size={16} />
-            </Link>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <Link
+                href={`/evaluations/${account.id}/edit`}
+                title="Edit account"
+                className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Pencil size={15} />
+              </Link>
+              <button
+                type="button"
+                title="Delete account"
+                onClick={onDeleteRequest}
+                className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -272,12 +364,161 @@ function AccountCard({ account }: { account: EvaluationAccount }) {
 
       </div>
 
-      {/* Notes: full-width, conditional */}
-      {account.notes && (
+      {/* Notes: conditional */}
+      {account.notes && !confirmDelete && (
         <div className="border-t border-border px-5 py-3">
           <p className="text-xs text-muted-foreground leading-relaxed">
             {account.notes}
           </p>
+        </div>
+      )}
+
+      {/* Status suggestions — hidden when delete confirmation is open */}
+      {!confirmDelete && hasSuggestions && (
+        <div className="border-t border-border">
+
+          {/* Pass conditions met */}
+          {showPassSuggestion && (
+            <div className="flex items-start justify-between gap-3 px-5 py-3.5 bg-amber-500/5 border-b border-amber-500/10 last:border-0">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <CheckCircle2 size={13} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                    Pass conditions met
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This account appears ready to be marked as Passed.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onMarkPassed}
+                disabled={updatingStatus}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {updatingStatus && <Loader2 size={11} className="animate-spin" />}
+                Mark as Passed
+              </button>
+            </div>
+          )}
+
+          {/* Breach risk detected */}
+          {showBreachSuggestion && (
+            <div className="flex items-start justify-between gap-3 px-5 py-3.5 bg-red-500/5 border-b border-red-500/10 last:border-0">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <AlertTriangle size={13} className="text-red-500 dark:text-red-400 shrink-0" />
+                  <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+                    Breach risk detected
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This account appears to be at or below the max drawdown limit.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onMarkBreached}
+                disabled={updatingStatus}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-500/30 text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {updatingStatus && <Loader2 size={11} className="animate-spin" />}
+                Mark as Breached
+              </button>
+            </div>
+          )}
+
+          {/* Funded transition — initial button, only for Passed accounts */}
+          {showFundedTransition && !confirmFunded && (
+            <div className="flex items-start justify-between gap-3 px-5 py-3.5 bg-emerald-500/5 border-b border-emerald-500/10 last:border-0">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-0.5">
+                  Ready for funded?
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Use this once your prop firm has activated the funded account.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onMarkFundedRequest}
+                disabled={updatingStatus}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                Mark as Funded
+              </button>
+            </div>
+          )}
+
+          {/* Funded confirmation step */}
+          {showFundedTransition && confirmFunded && (
+            <div className="border-b border-emerald-500/10 bg-emerald-500/5 px-5 py-3.5 last:border-0">
+              <p className="text-xs font-semibold text-foreground mb-0.5">
+                Mark as Funded?
+              </p>
+              <p className="text-xs text-muted-foreground mb-2.5">
+                Has this account been activated by the prop firm? This will move it to Funded.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onMarkFundedCancel}
+                  disabled={updatingStatus}
+                  className="px-3 py-1.5 text-xs font-medium border border-border text-muted-foreground rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onMarkFundedConfirm}
+                  disabled={updatingStatus}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-600 dark:bg-emerald-500 text-white rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {updatingStatus && <Loader2 size={11} className="animate-spin" />}
+                  Yes, mark as Funded
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Disclaimer */}
+          <div className="px-5 py-2 bg-muted/20 rounded-b-xl">
+            <p className="text-[11px] text-muted-foreground/60 italic">
+              Status suggestions are based on the rules you entered. Prop firm rules can vary, so always confirm manually.
+            </p>
+          </div>
+
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <div className="border-t border-destructive/20 bg-destructive/5 px-5 py-3.5 rounded-b-xl">
+          <p className="text-xs font-semibold text-foreground mb-0.5">
+            Delete this account?
+          </p>
+          <p className="text-xs text-muted-foreground mb-2.5">
+            Are you sure you want to delete this evaluation account? This action cannot be undone.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onDeleteCancel}
+              disabled={deleting}
+              className="px-3 py-1.5 text-xs font-medium border border-border text-muted-foreground rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onDeleteConfirm}
+              disabled={deleting}
+              className="px-3 py-1.5 text-xs font-medium bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {deleting ? "Deleting..." : "Yes, delete account"}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -287,15 +528,256 @@ function AccountCard({ account }: { account: EvaluationAccount }) {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function EvaluationsPage() {
+  const router = useRouter();
+
+  // Data state
+  const [accounts, setAccounts] = useState<EvaluationAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
+
+  // UI state
   const [activeFilter, setActiveFilter] = useState<FilterTab>("All");
 
-  const filteredAccounts = filterAccounts(MOCK_EVAL_ACCOUNTS, activeFilter);
+  // Delete state
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
-  const total    = MOCK_EVAL_ACCOUNTS.length;
-  const inEval   = MOCK_EVAL_ACCOUNTS.filter((a) => a.status === "In Eval").length;
-  const passed   = MOCK_EVAL_ACCOUNTS.filter((a) => a.status === "Passed").length;
-  const funded   = MOCK_EVAL_ACCOUNTS.filter((a) => a.status === "Funded").length;
-  const breached = MOCK_EVAL_ACCOUNTS.filter((a) => a.status === "Breached").length;
+  // Status update state
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [statusUpdateError, setStatusUpdateError] = useState("");
+
+  // Funded confirmation (two-step: request → confirm)
+  const [confirmFundedId, setConfirmFundedId] = useState<string | null>(null);
+
+  // Banner shown after automatic In Eval → Passed transitions on load
+  const [autoPassNotice, setAutoPassNotice] = useState("");
+
+  // ── Fetch accounts + linked closed trades, then auto-pass if eligible ────
+  useEffect(() => {
+    async function fetchAccounts() {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      // Fetch evaluation accounts and the user's closed linked trades in parallel.
+      // Both queries are scoped to user_id so no user can see another user's data.
+      const [accountsResult, tradesResult] = await Promise.all([
+        supabase
+          .from("evaluation_accounts")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("trades")
+          .select("account_id, pnl")
+          .eq("user_id", user.id)
+          .eq("status", "Closed")
+          .not("pnl", "is", null)
+          .not("account_id", "is", null),
+      ]);
+
+      if (accountsResult.error) {
+        setFetchError(accountsResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      // Build P&L totals and trade counts per account.
+      // If the trades query fails we fall back to the manual current_balance for each account.
+      const pnlSums: Record<string, number> = {};
+      const tradeCounts: Record<string, number> = {};
+      for (const trade of tradesResult.data ?? []) {
+        if (trade.account_id && trade.pnl != null) {
+          pnlSums[trade.account_id] = (pnlSums[trade.account_id] ?? 0) + Number(trade.pnl);
+          tradeCounts[trade.account_id] = (tradeCounts[trade.account_id] ?? 0) + 1;
+        }
+      }
+
+      // For accounts with linked closed trades: calculated balance = starting_balance + sum(pnl).
+      // For accounts with no linked trades: keep the manually entered current_balance as fallback.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mappedAccounts = (accountsResult.data ?? []).map((row: any) => {
+        const account = mapRow(row);
+        if ((tradeCounts[account.id] ?? 0) > 0) {
+          return {
+            ...account,
+            currentBalance: account.startingBalance + (pnlSums[account.id] ?? 0),
+          };
+        }
+        return account;
+      });
+
+      // ── Auto-pass: promote In Eval accounts that have met pass conditions ──
+      // Pass conditions (all must be true):
+      //   1. calculatedBalance >= profitTarget
+      //   2. profitTarget is set (not null)
+      //   3. status is In Eval or Not Started
+      //   4. account is not Breached
+      //   5. minTradingDays is 0 (no requirement) OR completedTradingDays >= minTradingDays
+      // Funded is NEVER set automatically — only Passed.
+      const eligibleForPass = mappedAccounts.filter((a) => {
+        if (a.status !== "In Eval" && a.status !== "Not Started") return false;
+        if (a.profitTarget === null) return false;
+        if (a.currentBalance < a.profitTarget) return false;
+        const daysOk = a.minTradingDays === 0 || a.completedTradingDays >= a.minTradingDays;
+        return daysOk;
+      });
+
+      let finalAccounts = mappedAccounts;
+
+      if (eligibleForPass.length > 0) {
+        // Update each eligible account in Supabase. Both id and user_id are required.
+        const passResults = await Promise.allSettled(
+          eligibleForPass.map((a) =>
+            supabase
+              .from("evaluation_accounts")
+              .update({ status: "Passed" })
+              .eq("id", a.id)
+              .eq("user_id", user.id)
+          )
+        );
+
+        // Only flip status locally for accounts where the Supabase update succeeded.
+        const successIds = new Set(
+          eligibleForPass
+            .filter((_, i) => {
+              const r = passResults[i];
+              return r.status === "fulfilled" && !r.value.error;
+            })
+            .map((a) => a.id)
+        );
+
+        if (successIds.size > 0) {
+          finalAccounts = mappedAccounts.map((a) =>
+            successIds.has(a.id) ? { ...a, status: "Passed" as EvaluationStatus } : a
+          );
+
+          const passedNames = eligibleForPass
+            .filter((a) => successIds.has(a.id))
+            .map((a) => a.accountName);
+
+          setAutoPassNotice(
+            passedNames.length === 1
+              ? `Profit target reached. ${passedNames[0]} has been moved to Passed.`
+              : `${passedNames.length} accounts reached their profit target and were moved to Passed.`
+          );
+        }
+      }
+
+      setAccounts(finalAccounts);
+      setLoading(false);
+    }
+
+    fetchAccounts();
+  }, [router]);
+
+  // ── Delete handler ───────────────────────────────────────────────────────
+  async function handleDelete(accountId: string) {
+    setDeletingId(accountId);
+    setDeleteError("");
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setDeleteError("You must be logged in to delete an account.");
+      setDeletingId(null);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("evaluation_accounts")
+      .delete()
+      .eq("id", accountId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setDeleteError(error.message);
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+      return;
+    }
+
+    setAccounts((prev) => prev.filter((a) => a.id !== accountId));
+    setConfirmDeleteId(null);
+    setDeletingId(null);
+  }
+
+  // ── Status update handler ────────────────────────────────────────────────
+  async function handleStatusUpdate(accountId: string, newStatus: EvaluationStatus) {
+    setUpdatingStatusId(accountId);
+    setStatusUpdateError("");
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setStatusUpdateError("You must be logged in to update an account.");
+      setUpdatingStatusId(null);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("evaluation_accounts")
+      .update({ status: newStatus })
+      .eq("id", accountId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setStatusUpdateError(error.message);
+      setUpdatingStatusId(null);
+      return;
+    }
+
+    setAccounts((prev) =>
+      prev.map((a) => (a.id === accountId ? { ...a, status: newStatus } : a))
+    );
+    setUpdatingStatusId(null);
+  }
+
+  // ── Loading state ────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 size={22} className="text-muted-foreground animate-spin" />
+        <p className="text-sm text-muted-foreground">Loading accounts...</p>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <AlertCircle size={22} className="text-destructive" />
+        <p className="text-sm font-medium text-foreground">Failed to load accounts</p>
+        <p className="text-sm text-muted-foreground max-w-xs text-center">
+          {fetchError}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Derived stats ────────────────────────────────────────────────────────
+
+  const filteredAccounts = filterAccounts(accounts, activeFilter);
+
+  const total    = accounts.length;
+  const inEval   = accounts.filter((a) => a.status === "In Eval").length;
+  const passed   = accounts.filter((a) => a.status === "Passed").length;
+  const funded   = accounts.filter((a) => a.status === "Funded").length;
+  const breached = accounts.filter((a) => a.status === "Breached").length;
 
   const concluded = passed + funded + breached;
   const passRate  = concluded > 0 ? Math.round(((passed + funded) / concluded) * 100) : null;
@@ -398,34 +880,87 @@ export default function EvaluationsPage() {
         </p>
       </div>
 
-      {/* Account list */}
-      {filteredAccounts.length > 0 ? (
-        <div className="flex flex-col gap-4">
-          {filteredAccounts.map((account) => (
-            <AccountCard key={account.id} account={account} />
-          ))}
+      {/* Error banners */}
+      {deleteError && (
+        <div className="mb-4 flex items-start gap-2 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <span>{deleteError}</span>
         </div>
-      ) : (
+      )}
+      {statusUpdateError && (
+        <div className="mb-4 flex items-start gap-2 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <span>{statusUpdateError}</span>
+        </div>
+      )}
+
+      {/* Auto-pass notice — shown once after automatic In Eval → Passed promotion */}
+      {autoPassNotice && (
+        <div className="mb-4 flex items-start gap-2 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-700 dark:text-amber-300">
+          <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+          <span>{autoPassNotice}</span>
+        </div>
+      )}
+
+      {/* Balance calculation note */}
+      {accounts.length > 0 && (
+        <p className="text-xs text-muted-foreground/60 italic mb-4">
+          Account balance is calculated from starting balance plus closed trades linked to this account.
+        </p>
+      )}
+
+      {/* Account list */}
+      {accounts.length === 0 ? (
         <div className="rounded-xl border border-border bg-card px-6 py-14 text-center shadow-sm">
           <p className="text-sm font-semibold text-foreground mb-1.5">
-            {activeFilter === "All"
-              ? "No evaluation accounts yet."
-              : `No ${activeFilter.toLowerCase()} accounts.`}
+            No evaluation accounts yet.
           </p>
           <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-            {activeFilter === "All"
-              ? "Track your first prop firm account to monitor progress, consistency, and risk."
-              : `Switch to All to see all accounts, or add a new ${activeFilter.toLowerCase()} account.`}
+            Track your first prop firm account to monitor progress, consistency, and risk.
           </p>
-          {activeFilter === "All" && (
-            <Link
-              href="/evaluations/new"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              <Plus size={14} />
-              Add your first account
-            </Link>
-          )}
+          <Link
+            href="/evaluations/new"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <Plus size={14} />
+            Add your first account
+          </Link>
+        </div>
+      ) : filteredAccounts.length === 0 ? (
+        <div className="rounded-xl border border-border bg-card px-6 py-14 text-center shadow-sm">
+          <p className="text-sm font-semibold text-foreground mb-1.5">
+            No {activeFilter.toLowerCase()} accounts.
+          </p>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            Switch to All to see all accounts, or add a new account.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {filteredAccounts.map((account) => (
+            <AccountCard
+              key={account.id}
+              account={account}
+              confirmDelete={confirmDeleteId === account.id}
+              confirmFunded={confirmFundedId === account.id}
+              deleting={deletingId === account.id}
+              updatingStatus={updatingStatusId === account.id}
+              onDeleteRequest={() => {
+                setConfirmDeleteId(account.id);
+                setDeleteError("");
+              }}
+              onDeleteConfirm={() => handleDelete(account.id)}
+              onDeleteCancel={() => setConfirmDeleteId(null)}
+              onMarkPassed={() => handleStatusUpdate(account.id, "Passed")}
+              onMarkBreached={() => handleStatusUpdate(account.id, "Breached")}
+              onMarkFundedRequest={() => setConfirmFundedId(account.id)}
+              onMarkFundedConfirm={async () => {
+                await handleStatusUpdate(account.id, "Funded");
+                setConfirmFundedId(null);
+              }}
+              onMarkFundedCancel={() => setConfirmFundedId(null)}
+            />
+          ))}
         </div>
       )}
 

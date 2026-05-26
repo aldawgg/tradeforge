@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,6 +39,9 @@ const PROP_FIRMS = [
   "Bulenox",
   "Take Profit Trader",
   "The Funded Trader",
+  "Alpha Futures",
+  "Lucid Trading",
+  "FundedNext",
   "Other / Custom",
 ] as const;
 
@@ -165,12 +170,21 @@ const EMPTY_FORM: FormState = {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function NewEvaluationPage() {
+  const router = useRouter();
   const [form, setFormState] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setFormState((prev) => ({ ...prev, [key]: value }));
+    setFormState((prev) => {
+      const next = { ...prev, [key]: value };
+      // When account size is picked, mirror it into starting balance as a convenience default
+      if (key === "accountSize" && value) {
+        next.startingBalance = value as string;
+      }
+      return next;
+    });
     setErrors((prev) => {
       const next = { ...prev };
       if (key in next) delete next[key as keyof FormErrors];
@@ -216,21 +230,18 @@ export default function NewEvaluationPage() {
     }
 
     if (form.maxDrawdown.trim()) {
-      if (isNaN(Number(form.maxDrawdown)) || Number(form.maxDrawdown) <= 0) {
+      if (isNaN(Number(form.maxDrawdown)) || Number(form.maxDrawdown) <= 0)
         e.maxDrawdown = "Must be a positive number";
-      }
     }
 
     if (form.dailyLossLimit.trim()) {
-      if (isNaN(Number(form.dailyLossLimit)) || Number(form.dailyLossLimit) <= 0) {
+      if (isNaN(Number(form.dailyLossLimit)) || Number(form.dailyLossLimit) <= 0)
         e.dailyLossLimit = "Must be a positive number";
-      }
     }
 
     if (form.minTradingDays.trim()) {
-      if (isNaN(Number(form.minTradingDays)) || Number(form.minTradingDays) < 0) {
+      if (isNaN(Number(form.minTradingDays)) || Number(form.minTradingDays) < 0)
         e.minTradingDays = "Must be 0 or greater";
-      }
     }
 
     if (form.completedTradingDays.trim()) {
@@ -251,65 +262,77 @@ export default function NewEvaluationPage() {
 
     if (form.consistency.trim()) {
       const v = Number(form.consistency);
-      if (isNaN(v) || v < 0 || v > 100) {
+      if (isNaN(v) || v < 0 || v > 100)
         e.consistency = "Must be between 0 and 100";
-      }
     }
 
     if (form.consistencyThreshold.trim()) {
       const v = Number(form.consistencyThreshold);
-      if (isNaN(v) || v < 0 || v > 100) {
+      if (isNaN(v) || v < 0 || v > 100)
         e.consistencyThreshold = "Must be between 0 and 100";
-      }
     }
 
     return e;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
     }
-    setSubmitted(true);
-  }
 
-  // ── Success screen ─────────────────────────────────────────────────────
+    setSaving(true);
+    setSaveError("");
 
-  if (submitted) {
-    return (
-      <div className="p-6 md:p-8 max-w-3xl mx-auto">
-        <div className="rounded-xl border border-border bg-card px-6 py-10 shadow-sm text-center">
-          <p className="text-lg font-semibold text-foreground mb-1.5">
-            Account added
-          </p>
-          <p className="text-sm text-muted-foreground mb-6">
-            Demo only: account saving will be connected to Supabase later.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <Link
-              href="/evaluations"
-              className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              Back to evaluations
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setFormState(EMPTY_FORM);
-                setSubmitted(false);
-                setErrors({});
-              }}
-              className="px-4 py-2 text-sm font-medium border border-border text-foreground rounded-lg hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-            >
-              Add another
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setSaveError("You must be logged in to save an account.");
+      setSaving(false);
+      return;
+    }
+
+    const firmName =
+      form.firm === "Other / Custom" ? form.customFirm.trim() : form.firm;
+
+    const payload = {
+      user_id: user.id,
+      prop_firm_name: firmName,
+      account_name: form.accountName.trim(),
+      account_size: form.accountSize ? Number(form.accountSize) : 0,
+      starting_balance: Number(form.startingBalance),
+      current_balance: Number(form.currentBalance),
+      profit_target: form.profitTarget.trim() ? Number(form.profitTarget) : null,
+      max_drawdown: form.maxDrawdown.trim() ? Number(form.maxDrawdown) : 0,
+      daily_loss_limit: form.dailyLossLimit.trim() ? Number(form.dailyLossLimit) : 0,
+      minimum_trading_days: form.minTradingDays.trim() ? Number(form.minTradingDays) : 0,
+      completed_trading_days: form.completedTradingDays.trim()
+        ? Number(form.completedTradingDays)
+        : 0,
+      consistency_threshold: form.consistencyThreshold.trim()
+        ? Number(form.consistencyThreshold)
+        : null,
+      consistency: form.consistency.trim() ? Number(form.consistency) : null,
+      status: form.status,
+      notes: form.notes,
+    };
+
+    const { error: insertError } = await supabase
+      .from("evaluation_accounts")
+      .insert(payload);
+
+    if (insertError) {
+      setSaveError(insertError.message);
+      setSaving(false);
+      return;
+    }
+
+    router.push("/evaluations");
   }
 
   // ── Form ───────────────────────────────────────────────────────────────
@@ -662,6 +685,12 @@ export default function NewEvaluationPage() {
         </SectionCard>
 
         {/* ── Footer ────────────────────────────────────────────── */}
+        {saveError && (
+          <div className="flex items-start gap-2 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <span>{saveError}</span>
+          </div>
+        )}
         <div className="flex items-center justify-between pt-4 pb-6">
           <Link
             href="/evaluations"
@@ -671,9 +700,11 @@ export default function NewEvaluationPage() {
           </Link>
           <button
             type="submit"
-            className="px-5 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            disabled={saving}
+            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Save Account
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            {saving ? "Saving..." : "Save Account"}
           </button>
         </div>
 

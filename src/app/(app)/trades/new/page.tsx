@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { TradeForm, FormState, EMPTY_FORM } from "@/components/trades/trade-form";
@@ -47,6 +47,24 @@ export default function AddTradePage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [availableAccounts, setAvailableAccounts] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    async function fetchAccounts() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("evaluation_accounts")
+        .select("id, account_name")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+      if (data) {
+        setAvailableAccounts(data.map((row) => ({ id: row.id, name: row.account_name })));
+      }
+    }
+    fetchAccounts();
+  }, []);
 
   // Lazy-initialised so sessionStorage is only read once on client mount.
   const [initialValues] = useState<Partial<FormState>>(() => ({
@@ -89,7 +107,7 @@ export default function AddTradePage() {
 
     const payload = {
       user_id: user.id,
-      account_id: null,
+      account_id: form.accounts[0] ?? null,
       date: form.date,
       instrument: isCustomInstrument ? "Custom" : form.instrument,
       custom_instrument: isCustomInstrument ? form.customInstrument.trim() : null,
@@ -132,6 +150,7 @@ export default function AddTradePage() {
       saving={saving}
       saveError={saveError}
       onSave={handleSave}
+      availableAccounts={availableAccounts}
     />
   );
 }

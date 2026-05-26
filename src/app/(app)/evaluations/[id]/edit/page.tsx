@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,9 @@ const PROP_FIRMS = [
   "Bulenox",
   "Take Profit Trader",
   "The Funded Trader",
+  "Alpha Futures",
+  "Lucid Trading",
+  "FundedNext",
   "Other / Custom",
 ] as const;
 
@@ -51,24 +55,6 @@ const ACCOUNT_SIZES = [
   { label: "$150,000", value: "150000" },
   { label: "$200,000", value: "200000" },
 ] as const;
-
-interface EvalAccount {
-  id: string;
-  firm: string;
-  accountName: string;
-  accountSize: number;
-  startingBalance: number;
-  currentBalance: number;
-  profitTarget: number | null;
-  maxDrawdown: number;
-  dailyLossLimit: number;
-  minTradingDays: number;
-  completedTradingDays: number;
-  status: EvalStatus;
-  consistency: number | null;
-  consistencyThreshold: number | null;
-  notes: string;
-}
 
 interface FormState {
   firm: string;
@@ -105,150 +91,52 @@ interface FormErrors {
   consistencyThreshold?: string;
 }
 
-// ── Placeholder accounts (mirrors evaluations/page.tsx) ───────────────────
+const EMPTY_FORM: FormState = {
+  firm: "",
+  customFirm: "",
+  accountName: "",
+  accountSize: "",
+  status: "",
+  startingBalance: "",
+  currentBalance: "",
+  profitTarget: "",
+  maxDrawdown: "",
+  dailyLossLimit: "",
+  minTradingDays: "",
+  completedTradingDays: "",
+  consistency: "",
+  consistencyThreshold: "",
+  notes: "",
+};
 
-const PLACEHOLDER_ACCOUNTS: EvalAccount[] = [
-  {
-    id: "1",
-    firm: "Apex",
-    accountName: "Apex 50K #1",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 51250,
-    profitTarget: 53000,
-    maxDrawdown: 2500,
-    dailyLossLimit: 1000,
-    minTradingDays: 7,
-    completedTradingDays: 4,
-    status: "In Eval",
-    consistency: 28,
-    consistencyThreshold: 30,
-    notes: "On track. Avoid trading Fridays.",
-  },
-  {
-    id: "2",
-    firm: "Apex",
-    accountName: "Apex 50K #2",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 50800,
-    profitTarget: 53000,
-    maxDrawdown: 2500,
-    dailyLossLimit: 1000,
-    minTradingDays: 7,
-    completedTradingDays: 2,
-    status: "In Eval",
-    consistency: 15,
-    consistencyThreshold: 30,
-    notes: "",
-  },
-  {
-    id: "3",
-    firm: "Apex",
-    accountName: "Apex 50K #3",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 53200,
-    profitTarget: 53000,
-    maxDrawdown: 2500,
-    dailyLossLimit: 1000,
-    minTradingDays: 7,
-    completedTradingDays: 8,
-    status: "Passed",
-    consistency: 18,
-    consistencyThreshold: 30,
-    notes: "Waiting for funded account setup.",
-  },
-  {
-    id: "4",
-    firm: "Topstep",
-    accountName: "Topstep 50K",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 52100,
-    profitTarget: null,
-    maxDrawdown: 2000,
-    dailyLossLimit: 1000,
-    minTradingDays: 0,
-    completedTradingDays: 12,
-    status: "Funded",
-    consistency: 22,
-    consistencyThreshold: 30,
-    notes: "Keep daily losses under $1,000.",
-  },
-  {
-    id: "5",
-    firm: "Topstep",
-    accountName: "Topstep 150K",
-    accountSize: 150000,
-    startingBalance: 150000,
-    currentBalance: 153500,
-    profitTarget: null,
-    maxDrawdown: 6000,
-    dailyLossLimit: 3000,
-    minTradingDays: 0,
-    completedTradingDays: 24,
-    status: "Funded",
-    consistency: 19,
-    consistencyThreshold: 30,
-    notes: "",
-  },
-  {
-    id: "6",
-    firm: "Tradeify",
-    accountName: "Tradeify 25K",
-    accountSize: 25000,
-    startingBalance: 25000,
-    currentBalance: 23400,
-    profitTarget: 26500,
-    maxDrawdown: 1500,
-    dailyLossLimit: 500,
-    minTradingDays: 5,
-    completedTradingDays: 3,
-    status: "Breached",
-    consistency: null,
-    consistencyThreshold: 35,
-    notes: "Stopped out after news event.",
-  },
-  {
-    id: "7",
-    firm: "Tradeify",
-    accountName: "Tradeify 50K",
-    accountSize: 50000,
-    startingBalance: 50000,
-    currentBalance: 50200,
-    profitTarget: 52500,
-    maxDrawdown: 2500,
-    dailyLossLimit: 1000,
-    minTradingDays: 5,
-    completedTradingDays: 1,
-    status: "In Eval",
-    consistency: 12,
-    consistencyThreshold: 35,
-    notes: "",
-  },
-];
+// ── Row → FormState conversion ─────────────────────────────────────────────
 
-function accountToForm(a: EvalAccount): FormState {
-  const firmKnown = (KNOWN_FIRMS as readonly string[]).includes(a.firm);
-  const sizeKnown = ACCOUNT_SIZES.some((s) => s.value === String(a.accountSize));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToFormState(row: any): FormState {
+  const firmKnown = (KNOWN_FIRMS as readonly string[]).includes(
+    row.prop_firm_name
+  );
+  const sizeVal = String(Math.round(Number(row.account_size)));
+  const sizeKnown = ACCOUNT_SIZES.some((s) => s.value === sizeVal);
+
   return {
-    firm: firmKnown ? a.firm : "Other / Custom",
-    customFirm: firmKnown ? "" : a.firm,
-    accountName: a.accountName,
-    accountSize: sizeKnown ? String(a.accountSize) : "",
-    status: a.status,
-    startingBalance: String(a.startingBalance),
-    currentBalance: String(a.currentBalance),
-    profitTarget: a.profitTarget !== null ? String(a.profitTarget) : "",
-    maxDrawdown: String(a.maxDrawdown),
-    dailyLossLimit: String(a.dailyLossLimit),
-    minTradingDays: String(a.minTradingDays),
-    completedTradingDays: String(a.completedTradingDays),
-    consistency: a.consistency !== null ? String(a.consistency) : "",
+    firm: firmKnown ? row.prop_firm_name : "Other / Custom",
+    customFirm: firmKnown ? "" : row.prop_firm_name,
+    accountName: row.account_name ?? "",
+    accountSize: sizeKnown ? sizeVal : "",
+    status: (row.status ?? "") as EvalStatus,
+    startingBalance: row.starting_balance != null ? String(row.starting_balance) : "",
+    currentBalance: row.current_balance != null ? String(row.current_balance) : "",
+    profitTarget: row.profit_target != null ? String(row.profit_target) : "",
+    maxDrawdown: row.max_drawdown != null ? String(row.max_drawdown) : "",
+    dailyLossLimit: row.daily_loss_limit != null ? String(row.daily_loss_limit) : "",
+    minTradingDays: row.minimum_trading_days != null ? String(row.minimum_trading_days) : "0",
+    completedTradingDays:
+      row.completed_trading_days != null ? String(row.completed_trading_days) : "0",
+    consistency: row.consistency != null ? String(row.consistency) : "",
     consistencyThreshold:
-      a.consistencyThreshold !== null ? String(a.consistencyThreshold) : "",
-    notes: a.notes,
+      row.consistency_threshold != null ? String(row.consistency_threshold) : "",
+    notes: row.notes ?? "",
   };
 }
 
@@ -313,61 +201,75 @@ function FieldGroup({
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function EditEvaluationPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id as string;
 
-  const account = PLACEHOLDER_ACCOUNTS.find((a) => a.id === id);
+  // Fetch state
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  const [accountName, setAccountName] = useState("");
 
-  const [form, setFormState] = useState<FormState>(() =>
-    account ? accountToForm(account) : {
-      firm: "",
-      customFirm: "",
-      accountName: "",
-      accountSize: "",
-      status: "",
-      startingBalance: "",
-      currentBalance: "",
-      profitTarget: "",
-      maxDrawdown: "",
-      dailyLossLimit: "",
-      minTradingDays: "",
-      completedTradingDays: "",
-      consistency: "",
-      consistencyThreshold: "",
-      notes: "",
-    }
-  );
+  // Form state
+  const [form, setFormState] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [submitted, setSubmitted] = useState(false);
 
-  if (!account) {
-    return (
-      <div className="p-6 md:p-8 max-w-3xl mx-auto">
-        <div className="mb-5">
-          <Link
-            href="/evaluations"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft size={14} />
-            Evaluation Tracker
-          </Link>
-        </div>
-        <div className="rounded-xl border border-border bg-card px-6 py-14 text-center shadow-sm">
-          <p className="text-sm font-semibold text-foreground mb-1.5">
-            Account not found
-          </p>
-          <p className="text-sm text-muted-foreground mb-6">
-            This account does not exist or has been removed.
-          </p>
-          <Link
-            href="/evaluations"
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors"
-          >
-            Back to evaluations
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  // Save state
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  // Delete state
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  // ── Load account on mount ──────────────────────────────────────────────
+  useEffect(() => {
+    async function loadAccount() {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("evaluation_accounts")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .single();
+
+      if (error) {
+        // PGRST116 = no rows returned — account not found or belongs to another user
+        if (error.code === "PGRST116") {
+          setNotFound(true);
+        } else {
+          setLoadError(error.message);
+        }
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+
+      setFormState(rowToFormState(data));
+      setAccountName(data.account_name ?? "");
+      setLoading(false);
+    }
+
+    loadAccount();
+  }, [id, router]);
+
+  // ── Field helpers ──────────────────────────────────────────────────────
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setFormState((prev) => ({ ...prev, [key]: value }));
@@ -416,21 +318,18 @@ export default function EditEvaluationPage() {
     }
 
     if (form.maxDrawdown.trim()) {
-      if (isNaN(Number(form.maxDrawdown)) || Number(form.maxDrawdown) <= 0) {
+      if (isNaN(Number(form.maxDrawdown)) || Number(form.maxDrawdown) <= 0)
         e.maxDrawdown = "Must be a positive number";
-      }
     }
 
     if (form.dailyLossLimit.trim()) {
-      if (isNaN(Number(form.dailyLossLimit)) || Number(form.dailyLossLimit) <= 0) {
+      if (isNaN(Number(form.dailyLossLimit)) || Number(form.dailyLossLimit) <= 0)
         e.dailyLossLimit = "Must be a positive number";
-      }
     }
 
     if (form.minTradingDays.trim()) {
-      if (isNaN(Number(form.minTradingDays)) || Number(form.minTradingDays) < 0) {
+      if (isNaN(Number(form.minTradingDays)) || Number(form.minTradingDays) < 0)
         e.minTradingDays = "Must be 0 or greater";
-      }
     }
 
     if (form.completedTradingDays.trim()) {
@@ -451,46 +350,169 @@ export default function EditEvaluationPage() {
 
     if (form.consistency.trim()) {
       const v = Number(form.consistency);
-      if (isNaN(v) || v < 0 || v > 100) {
+      if (isNaN(v) || v < 0 || v > 100)
         e.consistency = "Must be between 0 and 100";
-      }
     }
 
     if (form.consistencyThreshold.trim()) {
       const v = Number(form.consistencyThreshold);
-      if (isNaN(v) || v < 0 || v > 100) {
+      if (isNaN(v) || v < 0 || v > 100)
         e.consistencyThreshold = "Must be between 0 and 100";
-      }
     }
 
     return e;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  // ── Save handler ───────────────────────────────────────────────────────
+
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
     }
-    setSubmitted(true);
+
+    setSaving(true);
+    setSaveError("");
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setSaveError("You must be logged in to update an account.");
+      setSaving(false);
+      return;
+    }
+
+    const firmName =
+      form.firm === "Other / Custom" ? form.customFirm.trim() : form.firm;
+
+    const payload = {
+      prop_firm_name: firmName,
+      account_name: form.accountName.trim(),
+      account_size: form.accountSize ? Number(form.accountSize) : 0,
+      starting_balance: Number(form.startingBalance),
+      current_balance: Number(form.currentBalance),
+      profit_target: form.profitTarget.trim() ? Number(form.profitTarget) : null,
+      max_drawdown: form.maxDrawdown.trim() ? Number(form.maxDrawdown) : 0,
+      daily_loss_limit: form.dailyLossLimit.trim() ? Number(form.dailyLossLimit) : 0,
+      minimum_trading_days: form.minTradingDays.trim() ? Number(form.minTradingDays) : 0,
+      completed_trading_days: form.completedTradingDays.trim()
+        ? Number(form.completedTradingDays)
+        : 0,
+      consistency_threshold: form.consistencyThreshold.trim()
+        ? Number(form.consistencyThreshold)
+        : null,
+      consistency: form.consistency.trim() ? Number(form.consistency) : null,
+      status: form.status,
+      notes: form.notes,
+    };
+
+    const { error: updateError } = await supabase
+      .from("evaluation_accounts")
+      .update(payload)
+      .eq("id", id)
+      .eq("user_id", user.id);   // security: prevent editing another user's account
+
+    if (updateError) {
+      setSaveError(updateError.message);
+      setSaving(false);
+      return;
+    }
+
+    router.push("/evaluations");
   }
 
-  // ── Success screen ─────────────────────────────────────────────────────
+  // ── Delete handler ─────────────────────────────────────────────────────
 
-  if (submitted) {
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError("");
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setDeleteError("You must be logged in to delete an account.");
+      setDeleting(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("evaluation_accounts")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setDeleteError(error.message);
+      setDeleting(false);
+      return;
+    }
+
+    router.push("/evaluations");
+  }
+
+  // ── Loading state ──────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 size={22} className="text-muted-foreground animate-spin" />
+        <p className="text-sm text-muted-foreground">Loading account...</p>
+      </div>
+    );
+  }
+
+  // ── Error state ────────────────────────────────────────────────────────
+
+  if (loadError) {
+    return (
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <AlertCircle size={22} className="text-destructive" />
+        <p className="text-sm font-medium text-foreground">Failed to load account</p>
+        <p className="text-sm text-muted-foreground max-w-xs text-center">
+          {loadError}
+        </p>
+        <Link
+          href="/evaluations"
+          className="mt-1 text-sm text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
+        >
+          Back to Evaluation Tracker
+        </Link>
+      </div>
+    );
+  }
+
+  // ── Not found state ────────────────────────────────────────────────────
+
+  if (notFound) {
     return (
       <div className="p-6 md:p-8 max-w-3xl mx-auto">
-        <div className="rounded-xl border border-border bg-card px-6 py-10 shadow-sm text-center">
-          <p className="text-lg font-semibold text-foreground mb-1.5">
-            Account updated
+        <div className="mb-5">
+          <Link
+            href="/evaluations"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={14} />
+            Evaluation Tracker
+          </Link>
+        </div>
+        <div className="rounded-xl border border-border bg-card px-6 py-14 text-center shadow-sm">
+          <p className="text-sm font-semibold text-foreground mb-1.5">
+            Account not found
           </p>
           <p className="text-sm text-muted-foreground mb-6">
-            Demo only: account saving will be connected to Supabase later.
+            This account does not exist or has been removed.
           </p>
           <Link
             href="/evaluations"
-            className="inline-flex px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors"
           >
             Back to evaluations
           </Link>
@@ -499,28 +521,71 @@ export default function EditEvaluationPage() {
     );
   }
 
-  // ── Form ───────────────────────────────────────────────────────────────
+  // ── Account loaded — render form ───────────────────────────────────────
 
   return (
     <div className="p-6 md:p-8 max-w-3xl mx-auto">
 
       {/* Header */}
-      <div className="mb-8">
-        <Link
-          href="/evaluations"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <Link
+            href="/evaluations"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+          >
+            <ArrowLeft size={14} />
+            Evaluation Tracker
+          </Link>
+          <h1 className="text-xl font-semibold text-foreground">Edit Account</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{accountName}</p>
+          <p className="text-xs text-muted-foreground mt-4">
+            <span className="text-destructive">*</span> Required fields
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setConfirmDelete(true); setDeleteError(""); }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors shrink-0"
         >
-          <ArrowLeft size={14} />
-          Evaluation Tracker
-        </Link>
-        <h1 className="text-xl font-semibold text-foreground">Edit Account</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{account.accountName}</p>
-        <p className="text-xs text-muted-foreground mt-4">
-          <span className="text-destructive">*</span> Required fields
-        </p>
+          <Trash2 size={13} />
+          Delete
+        </button>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate className="space-y-6">
+      {/* Delete confirmation banner */}
+      {confirmDelete && (
+        <div className="mb-8 rounded-xl border border-destructive/20 bg-destructive/5 px-5 py-4">
+          <p className="text-sm font-semibold text-foreground mb-0.5">
+            Delete this account?
+          </p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Are you sure you want to delete this evaluation account? This action cannot be undone.
+          </p>
+          {deleteError && (
+            <p className="text-xs text-destructive mb-3">{deleteError}</p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setConfirmDelete(false); setDeleteError(""); }}
+              disabled={deleting}
+              className="px-3 py-1.5 text-sm font-medium border border-border text-muted-foreground rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-3 py-1.5 text-sm font-medium bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {deleting ? "Deleting..." : "Yes, delete account"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleSave} noValidate className="space-y-6">
 
         {/* ── Section 1: Account Details ────────────────────────── */}
         <SectionCard title="Account Details">
@@ -847,6 +912,12 @@ export default function EditEvaluationPage() {
         </SectionCard>
 
         {/* ── Footer ────────────────────────────────────────────── */}
+        {saveError && (
+          <div className="flex items-start gap-2 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <span>{saveError}</span>
+          </div>
+        )}
         <div className="flex items-center justify-between pt-4 pb-6">
           <Link
             href="/evaluations"
@@ -856,9 +927,11 @@ export default function EditEvaluationPage() {
           </Link>
           <button
             type="submit"
-            className="px-5 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            disabled={saving}
+            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Save Changes
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
 
