@@ -10,6 +10,7 @@ import {
   Filter,
   Eye,
   Pencil,
+  Trash2,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -246,6 +247,11 @@ export default function TradesPage() {
   const [sortKey, setSortKey] = useState<SortKey | null>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // Delete state
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+
   // ── Fetch trades on mount ────────────────────────────────────────────────
   useEffect(() => {
     async function fetchTrades() {
@@ -279,6 +285,41 @@ export default function TradesPage() {
 
     fetchTrades();
   }, [router]);
+
+  // ── Delete handler ───────────────────────────────────────────────────────
+  async function handleDelete(tradeId: string) {
+    setDeletingId(tradeId);
+    setDeleteError("");
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setDeleteError("You must be logged in to delete a trade.");
+      setDeletingId(null);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("trades")
+      .delete()
+      .eq("id", tradeId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setDeleteError(error.message);
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+      return;
+    }
+
+    // Remove from local state — no full refetch needed
+    setTrades((prev) => prev.filter((t) => t.id !== tradeId));
+    setConfirmDeleteId(null);
+    setDeletingId(null);
+  }
 
   // ── Sort handler ─────────────────────────────────────────────────────────
   function handleSort(key: SortKey) {
@@ -494,6 +535,14 @@ export default function TradesPage() {
         </div>
       </div>
 
+      {/* Delete error banner */}
+      {deleteError && (
+        <div className="mb-4 flex items-start gap-2 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <span>{deleteError}</span>
+        </div>
+      )}
+
       {/* Table or empty state */}
       {trades.length === 0 ? (
         <EmptyState />
@@ -529,14 +578,14 @@ export default function TradesPage() {
             <TableHeader>
               <TableRow className="hover:bg-transparent border-border bg-muted/30">
                 <SortHead className="w-[13%] pl-5" sortKey="date"      activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Date</SortHead>
-                <SortHead className="w-[14%]"       sortKey="account"   activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Account</SortHead>
+                <SortHead className="w-[11%]"       sortKey="account"   activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Account</SortHead>
                 <TableHead className="w-[7%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Instrument
                 </TableHead>
                 <TableHead className="w-[8%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Direction
                 </TableHead>
-                <SortHead className="w-[17%]" sortKey="setup" activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Setup</SortHead>
+                <SortHead className="w-[14%]" sortKey="setup" activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Setup</SortHead>
                 <TableHead className="w-[10%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Outcome
                 </TableHead>
@@ -545,7 +594,7 @@ export default function TradesPage() {
                 <TableHead className="w-[8%] text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Status
                 </TableHead>
-                <TableHead className="w-[4%] text-xs font-medium text-muted-foreground uppercase tracking-wide" />
+                <TableHead className="w-[10%] text-xs font-medium text-muted-foreground uppercase tracking-wide" />
               </TableRow>
             </TableHeader>
 
@@ -631,24 +680,64 @@ export default function TradesPage() {
                   </TableCell>
 
                   <TableCell className="py-3.5 pr-4">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link
-                        href={`/trades/${trade.id}`}
-                        title="View trade"
-                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors inline-flex items-center justify-center"
+                    {confirmDeleteId === trade.id ? (
+                      // Inline confirmation for this row
+                      <div
+                        className="flex items-center justify-end gap-1.5"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Eye size={14} />
-                      </Link>
-                      <Link
-                        href={`/trades/${trade.id}/edit`}
-                        title="Edit trade"
-                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Pencil size={14} />
-                      </Link>
-                    </div>
+                        <span className="text-xs text-muted-foreground mr-0.5">
+                          Delete?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="px-2 py-1 text-xs font-medium rounded border border-border text-muted-foreground hover:bg-muted transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(trade.id)}
+                          disabled={deletingId === trade.id}
+                          className="px-2 py-1 text-xs font-medium rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {deletingId === trade.id ? "..." : "Delete"}
+                        </button>
+                      </div>
+                    ) : (
+                      // Normal hover actions
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Link
+                          href={`/trades/${trade.id}`}
+                          title="View trade"
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors inline-flex items-center justify-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Eye size={14} />
+                        </Link>
+                        <Link
+                          href={`/trades/${trade.id}/edit`}
+                          title="Edit trade"
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Pencil size={14} />
+                        </Link>
+                        <button
+                          type="button"
+                          title="Delete trade"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteId(trade.id);
+                            setDeleteError("");
+                          }}
+                          className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

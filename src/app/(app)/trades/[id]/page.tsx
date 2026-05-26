@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Pencil,
   Copy,
+  Trash2,
   ImageIcon,
   CheckCircle2,
   AlertCircle,
@@ -180,6 +181,11 @@ export default function TradeDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [showDollars, setShowDollars] = useState(false);
 
+  // Delete state
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
   useEffect(() => {
     async function fetchTrade() {
       const supabase = createClient();
@@ -222,6 +228,38 @@ export default function TradeDetailPage() {
 
     fetchTrade();
   }, [id, router]);
+
+  // ── Delete handler ───────────────────────────────────────────────────────
+
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError("");
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setDeleteError("You must be logged in to delete a trade.");
+      setDeleting(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("trades")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setDeleteError(error.message);
+      setDeleting(false);
+      return;
+    }
+
+    router.push("/trades");
+  }
 
   // ── Loading state ────────────────────────────────────────────────────────
 
@@ -311,6 +349,14 @@ export default function TradeDetailPage() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
+            onClick={() => { setConfirmDelete(true); setDeleteError(""); }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 size={13} />
+            Delete
+          </button>
+          <button
+            type="button"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
           >
             <Copy size={13} />
@@ -325,6 +371,40 @@ export default function TradeDetailPage() {
           </Link>
         </div>
       </div>
+
+      {/* Delete confirmation banner */}
+      {confirmDelete && (
+        <div className="mb-6 rounded-xl border border-destructive/20 bg-destructive/5 px-5 py-4">
+          <p className="text-sm font-semibold text-foreground mb-0.5">
+            Delete this trade?
+          </p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Are you sure you want to delete this trade? This action cannot be
+            undone.
+          </p>
+          {deleteError && (
+            <p className="text-xs text-destructive mb-3">{deleteError}</p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setConfirmDelete(false); setDeleteError(""); }}
+              disabled={deleting}
+              className="px-3 py-1.5 text-sm font-medium border border-border text-muted-foreground rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-3 py-1.5 text-sm font-medium bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {deleting ? "Deleting..." : "Yes, delete trade"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Key result cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
