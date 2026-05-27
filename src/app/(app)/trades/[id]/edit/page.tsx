@@ -10,7 +10,9 @@ import {
   FormState,
   OutcomeField,
   TradeStatusField,
+  ExistingScreenshot,
 } from "@/components/trades/trade-form";
+import type { PendingScreenshot } from "@/components/trades/screenshot-uploader";
 
 // ── Row → FormState conversion ──────────────────────────────────────────────
 
@@ -91,6 +93,9 @@ export default function EditTradePage() {
   const [loading, setLoading] = useState(true);
   const [availableAccounts, setAvailableAccounts] = useState<{ id: string; name: string }[]>([]);
 
+  // ── Screenshot state ───────────────────────────────────────────────────
+  const [existingScreenshots, setExistingScreenshots] = useState<ExistingScreenshot[]>([]);
+
   // ── Save state ─────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -145,6 +150,26 @@ export default function EditTradePage() {
         );
       }
 
+      // Load existing screenshots — use public storage URLs (no signed URL needed).
+      const { data: screenshotRows } = await supabase
+        .from("trade_screenshots")
+        .select("id, storage_path, screenshot_type")
+        .eq("trade_id", id)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+
+      if (screenshotRows && screenshotRows.length > 0) {
+        const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        setExistingScreenshots(
+          screenshotRows.map((row) => ({
+            id: row.id,
+            storage_path: row.storage_path,
+            screenshot_type: row.screenshot_type,
+            publicUrl: `${base}/storage/v1/object/public/trade-screenshots/${row.storage_path}`,
+          }))
+        );
+      }
+
       setInitialValues(rowToFormState(tradeResult.data));
       setSubtitle(buildSubtitle(tradeResult.data));
       setLoading(false);
@@ -154,7 +179,7 @@ export default function EditTradePage() {
   }, [id, router]);
 
   // ── Handle form submission ─────────────────────────────────────────────
-  async function handleSave(form: FormState) {
+  async function handleSave(form: FormState, screenshots: PendingScreenshot[]) {
     setSaving(true);
     setSaveError("");
 
@@ -208,8 +233,41 @@ export default function EditTradePage() {
       return;
     }
 
-    // Success — go back to the trade detail page
+    // Upload new screenshots via the server-side API route.
+    const uploadFailures: string[] = [];
+    for (const screenshot of screenshots) {
+      const fd = new FormData();
+      fd.append("file", screenshot.file);
+      fd.append("trade_id", id);
+      fd.append("screenshot_type", screenshot.type);
+
+      const res = await fetch("/api/screenshots", { method: "POST", body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Upload failed" }));
+        uploadFailures.push(`"${screenshot.file.name}": ${body.error ?? "Upload failed"}`);
+      }
+    }
+
+    if (uploadFailures.length > 0) {
+      setSaveError(
+        `Trade saved, but ${uploadFailures.length} screenshot(s) failed: ${uploadFailures.join(", ")}`
+      );
+      setSaving(false);
+      return;
+    }
+
     router.push(`/trades/${id}`);
+  }
+
+  // ── Screenshot delete ──────────────────────────────────────────────────
+
+  async function handleDeleteExistingScreenshot(screenshotId: string, storagePath: string) {
+    await fetch("/api/screenshots", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storage_path: storagePath, screenshot_id: screenshotId }),
+    });
+    setExistingScreenshots((prev) => prev.filter((s) => s.id !== screenshotId));
   }
 
   // ── Loading state ──────────────────────────────────────────────────────
@@ -271,6 +329,8 @@ export default function EditTradePage() {
       saveError={saveError}
       onSave={handleSave}
       availableAccounts={availableAccounts}
+      existingScreenshots={existingScreenshots}
+      onDeleteExistingScreenshot={handleDeleteExistingScreenshot}
     />
   );
 }

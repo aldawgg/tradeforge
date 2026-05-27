@@ -11,10 +11,10 @@ import {
   ImageIcon,
   CheckCircle2,
   AlertCircle,
-  UploadCloud,
   Loader2,
   TrendingUp,
   TrendingDown,
+  X,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { cn } from "@/lib/utils";
@@ -187,6 +187,16 @@ function UnitToggle({
   );
 }
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface TradeScreenshot {
+  id: string;
+  storage_path: string;
+  screenshot_type: string;
+  created_at: string;
+  signedUrl: string;
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function TradeDetailPage() {
@@ -200,7 +210,14 @@ export default function TradeDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [showDollars, setShowDollars] = useState(false);
 
-  // Delete state
+  // Screenshot state
+  const [screenshots, setScreenshots] = useState<TradeScreenshot[]>([]);
+  const [screenshotsLoading, setScreenshotsLoading] = useState(true);
+  const [confirmDeleteScreenshotId, setConfirmDeleteScreenshotId] = useState<string | null>(null);
+  const [deletingScreenshotId, setDeletingScreenshotId] = useState<string | null>(null);
+  const [screenshotDeleteError, setScreenshotDeleteError] = useState("");
+
+  // Delete trade state
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -232,17 +249,41 @@ export default function TradeDetailPage() {
           setFetchError(error.message);
         }
         setLoading(false);
+        setScreenshotsLoading(false);
         return;
       }
 
       if (!data) {
         setNotFound(true);
         setLoading(false);
+        setScreenshotsLoading(false);
         return;
       }
 
       setTrade(mapRow(data));
       setLoading(false);
+
+      // Load screenshots for this trade.
+      const { data: screenshotRows } = await supabase
+        .from("trade_screenshots")
+        .select("id, storage_path, screenshot_type, created_at")
+        .eq("trade_id", id)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+
+      if (screenshotRows && screenshotRows.length > 0) {
+        const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        setScreenshots(
+          screenshotRows.map((row) => ({
+            id: row.id,
+            storage_path: row.storage_path,
+            screenshot_type: row.screenshot_type,
+            created_at: row.created_at,
+            signedUrl: `${base}/storage/v1/object/public/trade-screenshots/${row.storage_path}`,
+          }))
+        );
+      }
+      setScreenshotsLoading(false);
     }
 
     fetchTrade();
@@ -278,6 +319,30 @@ export default function TradeDetailPage() {
     }
 
     router.push("/trades");
+  }
+
+  // ── Screenshot delete handler ────────────────────────────────────────────
+
+  async function handleDeleteScreenshot(screenshotId: string, storagePath: string) {
+    setDeletingScreenshotId(screenshotId);
+    setScreenshotDeleteError("");
+
+    const res = await fetch("/api/screenshots", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storage_path: storagePath, screenshot_id: screenshotId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: "Delete failed" }));
+      setScreenshotDeleteError(body.error ?? "Delete failed");
+      setDeletingScreenshotId(null);
+      return;
+    }
+
+    setScreenshots((prev) => prev.filter((s) => s.id !== screenshotId));
+    setConfirmDeleteScreenshotId(null);
+    setDeletingScreenshotId(null);
   }
 
   // ── Loading state ────────────────────────────────────────────────────────
@@ -552,28 +617,92 @@ export default function TradeDetailPage() {
 
           {/* Screenshots */}
           <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">
-              Screenshots
-            </p>
-            <div className="rounded-lg border-2 border-dashed border-border bg-muted/20 flex flex-col items-center justify-center text-center gap-3 py-10 px-6">
-              <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                <ImageIcon size={18} className="text-muted-foreground/40" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">No screenshots uploaded</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  Screenshot upload will be available once storage is connected.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-muted-foreground bg-muted cursor-not-allowed opacity-50 mt-1"
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Screenshots
+              </p>
+              <Link
+                href={`/trades/${trade.id}/edit`}
+                className="text-xs text-primary hover:text-primary/80 transition-colors"
               >
-                <UploadCloud size={13} />
-                Upload Screenshot
-              </button>
+                + Add screenshots
+              </Link>
             </div>
+
+            {screenshotDeleteError && (
+              <p className="text-xs text-destructive mb-3">{screenshotDeleteError}</p>
+            )}
+
+            {screenshotsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 size={16} className="text-muted-foreground animate-spin" />
+              </div>
+            ) : screenshots.length === 0 ? (
+              <div className="rounded-lg border-2 border-dashed border-border bg-muted/20 flex flex-col items-center justify-center text-center gap-2 py-8 px-6">
+                <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
+                  <ImageIcon size={16} className="text-muted-foreground/40" />
+                </div>
+                <p className="text-sm text-muted-foreground">No screenshots yet</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {screenshots.map((s) => (
+                  <div
+                    key={s.id}
+                    className="rounded-lg border border-border bg-muted/20 overflow-hidden"
+                  >
+                    <div className="aspect-video bg-muted">
+                      {s.signedUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={s.signedUrl}
+                          alt={s.screenshot_type}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <ImageIcon size={18} className="text-muted-foreground/30" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="px-2.5 py-2 flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground truncate">
+                        {s.screenshot_type}
+                      </span>
+                      {confirmDeleteScreenshotId === s.id ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteScreenshotId(null)}
+                            disabled={deletingScreenshotId === s.id}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteScreenshot(s.id, s.storage_path)}
+                            disabled={deletingScreenshotId === s.id}
+                            className="text-xs text-destructive hover:text-destructive/80 transition-colors disabled:opacity-40"
+                          >
+                            {deletingScreenshotId === s.id ? "Deleting…" : "Confirm"}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setConfirmDeleteScreenshotId(s.id); setScreenshotDeleteError(""); }}
+                          aria-label="Delete screenshot"
+                          className="shrink-0 p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
         </div>

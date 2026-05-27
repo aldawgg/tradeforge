@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { TradeForm, FormState, EMPTY_FORM } from "@/components/trades/trade-form";
+import type { PendingScreenshot } from "@/components/trades/screenshot-uploader";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ export default function AddTradePage() {
     ...getSessionDefaults(),
   }));
 
-  async function handleSave(form: FormState) {
+  async function handleSave(form: FormState, screenshots: PendingScreenshot[]) {
     setSaving(true);
     setSaveError("");
 
@@ -130,7 +131,11 @@ export default function AddTradePage() {
       target: form.target.trim() ? Number(form.target) : 0,
     };
 
-    const { error: insertError } = await supabase.from("trades").insert(payload);
+    const { data: insertResult, error: insertError } = await supabase
+      .from("trades")
+      .insert(payload)
+      .select("id")
+      .single();
 
     if (insertError) {
       setSaveError(insertError.message);
@@ -138,7 +143,32 @@ export default function AddTradePage() {
       return;
     }
 
-    router.push("/trades");
+    const tradeId = insertResult.id as string;
+
+    // Upload screenshots via the server-side API route.
+    const uploadFailures: string[] = [];
+    for (const screenshot of screenshots) {
+      const fd = new FormData();
+      fd.append("file", screenshot.file);
+      fd.append("trade_id", tradeId);
+      fd.append("screenshot_type", screenshot.type);
+
+      const res = await fetch("/api/screenshots", { method: "POST", body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Upload failed" }));
+        uploadFailures.push(`"${screenshot.file.name}": ${body.error ?? "Upload failed"}`);
+      }
+    }
+
+    if (uploadFailures.length > 0) {
+      setSaveError(
+        `Trade saved, but ${uploadFailures.length} screenshot(s) failed: ${uploadFailures.join(", ")}`
+      );
+      setSaving(false);
+      return;
+    }
+
+    router.push(`/trades/${tradeId}`);
   }
 
   return (

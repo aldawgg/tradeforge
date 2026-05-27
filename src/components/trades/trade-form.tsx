@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import {
+  ScreenshotUploader,
+  PendingScreenshot,
+} from "@/components/trades/screenshot-uploader";
+import { ArrowLeft, ChevronDown, ImageIcon, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -374,6 +378,13 @@ function AdvancedSection({
 
 // ── TradeForm component ─────────────────────────────────────────────────────
 
+export interface ExistingScreenshot {
+  id: string;
+  storage_path: string;
+  screenshot_type: string;
+  publicUrl: string;
+}
+
 export interface TradeFormProps {
   mode: "create" | "edit";
   /** Required in edit mode — used for back and cancel link hrefs. */
@@ -385,9 +396,13 @@ export interface TradeFormProps {
   description?: string;
   saving: boolean;
   saveError: string;
-  onSave: (values: FormState) => Promise<void>;
+  onSave: (values: FormState, screenshots: PendingScreenshot[]) => Promise<void>;
   /** Real evaluation accounts fetched from Supabase. */
   availableAccounts?: { id: string; name: string }[];
+  /** Already-saved screenshots shown in edit mode. */
+  existingScreenshots?: ExistingScreenshot[];
+  /** Called when the user confirms deleting an existing screenshot. */
+  onDeleteExistingScreenshot?: (id: string, storagePath: string) => Promise<void>;
 }
 
 export function TradeForm({
@@ -400,6 +415,8 @@ export function TradeForm({
   saveError,
   onSave,
   availableAccounts = [],
+  existingScreenshots = [],
+  onDeleteExistingScreenshot,
 }: TradeFormProps) {
   const backHref = mode === "create" ? "/dashboard" : `/trades/${tradeId}`;
 
@@ -408,6 +425,9 @@ export function TradeForm({
     ...initialValues,
   }));
   const [errors, setErrors] = useState<FormErrors>({});
+  const [pendingScreenshots, setPendingScreenshots] = useState<PendingScreenshot[]>([]);
+  const [confirmDeleteExistingId, setConfirmDeleteExistingId] = useState<string | null>(null);
+  const [deletingExistingId, setDeletingExistingId] = useState<string | null>(null);
   // Edit form opens advanced section by default (trade likely has price data).
   const [showAdvanced, setShowAdvanced] = useState(mode === "edit");
 
@@ -463,7 +483,7 @@ export function TradeForm({
       if (errs.stopLoss || errs.target) setShowAdvanced(true);
       return;
     }
-    await onSave(form);
+    await onSave(form, pendingScreenshots);
   }
 
   const isOpen = form.tradeStatus === "Open";
@@ -890,22 +910,87 @@ export function TradeForm({
               />
             </FieldGroup>
 
-            {/* Screenshot placeholder — only shown when adding a new trade */}
-            {mode === "create" && (
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium text-foreground">
-                  Screenshots
-                  <span className="font-normal text-muted-foreground text-xs ml-1.5">
-                    (optional)
-                  </span>
-                </p>
-                <div className="rounded-lg border border-dashed border-border py-5 px-4 text-center">
-                  <p className="text-xs text-muted-foreground">
-                    Screenshot upload coming soon
-                  </p>
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium text-foreground">
+                Screenshots
+                <span className="font-normal text-muted-foreground text-xs ml-1.5">
+                  (optional)
+                </span>
+              </p>
+
+              {/* Existing screenshots (edit mode) */}
+              {existingScreenshots.length > 0 && (
+                <div className="grid grid-cols-2 gap-3 mb-1">
+                  {existingScreenshots.map((s) => (
+                    <div
+                      key={s.id}
+                      className="rounded-lg border border-border bg-muted/20 overflow-hidden"
+                    >
+                      <div className="aspect-video bg-muted">
+                        {s.publicUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={s.publicUrl}
+                            alt={s.screenshot_type}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <ImageIcon size={16} className="text-muted-foreground/30" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="px-2.5 py-2 flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground truncate">
+                          {s.screenshot_type}
+                        </span>
+                        {confirmDeleteExistingId === s.id ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteExistingId(null)}
+                              disabled={deletingExistingId === s.id}
+                              className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setDeletingExistingId(s.id);
+                                await onDeleteExistingScreenshot?.(s.id, s.storage_path);
+                                setDeletingExistingId(null);
+                                setConfirmDeleteExistingId(null);
+                              }}
+                              disabled={deletingExistingId === s.id}
+                              className="text-xs text-destructive hover:text-destructive/80 transition-colors disabled:opacity-40"
+                            >
+                              {deletingExistingId === s.id ? "Deleting…" : "Confirm"}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteExistingId(s.id)}
+                            disabled={saving}
+                            aria-label="Delete screenshot"
+                            className="shrink-0 p-0.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              )}
+
+              <ScreenshotUploader
+                pending={pendingScreenshots}
+                onChange={setPendingScreenshots}
+                disabled={saving}
+              />
+            </div>
 
           </div>
         </SectionCard>
