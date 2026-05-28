@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Trophy, BarChart2, Clock, AlertTriangle, ChevronDown,
+  Trophy, BarChart2, Clock, AlertTriangle,
   ArrowUp, ArrowDown, ArrowUpDown, Loader2, AlertCircle, Plus,
 } from "lucide-react";
 import {
@@ -19,6 +19,13 @@ import {
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { SetupStat, SessionStat, TagStat } from "@/lib/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ── Period selector ────────────────────────────────────────────────────────
 
@@ -178,19 +185,6 @@ function RText({ value }: { value: number }) {
   );
 }
 
-function FilterChip({ label, value }: { label: string; value: string }) {
-  return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-    >
-      <span className="text-muted-foreground/60">{label}:</span>
-      <span className="text-foreground">{value}</span>
-      <ChevronDown size={11} className="text-muted-foreground/50" />
-    </button>
-  );
-}
-
 // ── Sort types + head ──────────────────────────────────────────────────────
 
 type SetupSortKey = "trades" | "winRate" | "pnl" | "avgR";
@@ -246,7 +240,10 @@ export default function AnalyticsPage() {
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
-  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState("all");
+  const [selectedInstrument, setSelectedInstrument] = useState("all");
+  const [selectedSetup, setSelectedSetup] = useState("all");
+  const [selectedSession, setSelectedSession] = useState("all");
   const [setupSortKey, setSetupSortKey] = useState<SetupSortKey | null>(null);
   const [setupSortDir, setSetupSortDir] = useState<SortDir>("desc");
 
@@ -309,13 +306,36 @@ export default function AnalyticsPage() {
     }
   }
 
+  // ── Filter options derived from all trades ─────────────────────────────
+
+  const uniqueInstruments = [...new Set(trades.map((t) =>
+    t.instrument === "Custom" ? (t.custom_instrument || "Custom") : t.instrument
+  ))].sort();
+
+  const uniqueSetups = [...new Set(trades.map((t) =>
+    t.setup === "Custom" ? (t.custom_setup || "Custom") : t.setup
+  ))].sort();
+
+  const uniqueSessions = [...new Set(trades.map((t) => t.session))].sort();
+
   // ── Apply filters ──────────────────────────────────────────────────────
 
   const today = todayStr();
   const periodStart = getPeriodStart(period);
   const filteredTrades = trades
     .filter((t) => t.date >= periodStart && t.date <= today)
-    .filter((t) => !selectedAccountId || t.account_id === selectedAccountId);
+    .filter((t) => selectedAccountId === "all" || t.account_id === selectedAccountId)
+    .filter((t) => {
+      if (selectedInstrument === "all") return true;
+      const name = t.instrument === "Custom" ? (t.custom_instrument || "Custom") : t.instrument;
+      return name === selectedInstrument;
+    })
+    .filter((t) => {
+      if (selectedSetup === "all") return true;
+      const name = t.setup === "Custom" ? (t.custom_setup || "Custom") : t.setup;
+      return name === selectedSetup;
+    })
+    .filter((t) => selectedSession === "all" || t.session === selectedSession);
 
   // ── Compute stats from filtered trades ─────────────────────────────────
 
@@ -407,12 +427,6 @@ export default function AnalyticsPage() {
       </div>
     );
   }
-
-  // ── Account filter label ───────────────────────────────────────────────
-
-  const selectedAccountName = selectedAccountId
-    ? (accounts.find((a) => a.id === selectedAccountId)?.name ?? "All accounts")
-    : "All accounts";
 
   // ── Loading state ──────────────────────────────────────────────────────
 
@@ -573,30 +587,57 @@ export default function AnalyticsPage() {
           ))}
         </div>
 
-        {/* Account — functional via hidden native select */}
-        <div className="relative">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border bg-card text-muted-foreground pointer-events-none select-none">
-            <span className="text-muted-foreground/60">Account:</span>
-            <span className="text-foreground">{selectedAccountName}</span>
-            <ChevronDown size={11} className="text-muted-foreground/50" />
-          </div>
-          <select
-            aria-label="Filter by account"
-            className="absolute inset-0 opacity-0 cursor-pointer"
-            value={selectedAccountId}
-            onChange={(e) => setSelectedAccountId(e.target.value)}
-          >
-            <option value="">All accounts</option>
+        {/* Account filter */}
+        <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+          <SelectTrigger className="w-36 h-8 text-sm">
+            <SelectValue placeholder="Account" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All accounts</SelectItem>
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
+              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
             ))}
-          </select>
-        </div>
+          </SelectContent>
+        </Select>
 
-        {/* Non-functional filter chips */}
-        <FilterChip label="Instrument" value="All instruments" />
-        <FilterChip label="Setup" value="All setups" />
-        <FilterChip label="Session" value="All sessions" />
+        {/* Instrument filter */}
+        <Select value={selectedInstrument} onValueChange={setSelectedInstrument}>
+          <SelectTrigger className="w-36 h-8 text-sm">
+            <SelectValue placeholder="Instrument" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All instruments</SelectItem>
+            {uniqueInstruments.map((v) => (
+              <SelectItem key={v} value={v}>{v}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Setup filter */}
+        <Select value={selectedSetup} onValueChange={setSelectedSetup}>
+          <SelectTrigger className="w-44 h-8 text-sm">
+            <SelectValue placeholder="Setup" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All setups</SelectItem>
+            {uniqueSetups.map((v) => (
+              <SelectItem key={v} value={v}>{v}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Session filter */}
+        <Select value={selectedSession} onValueChange={setSelectedSession}>
+          <SelectTrigger className="w-36 h-8 text-sm">
+            <SelectValue placeholder="Session" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sessions</SelectItem>
+            {uniqueSessions.map((v) => (
+              <SelectItem key={v} value={v}>{v}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
       </div>
 

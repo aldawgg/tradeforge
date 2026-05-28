@@ -189,6 +189,7 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("1D");
   const [trades, setTrades] = useState<FetchedTrade[]>([]);
   const [accounts, setAccounts] = useState<FetchedAccount[]>([]);
+  const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
 
@@ -197,6 +198,8 @@ export default function DashboardPage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
+
+      setDisplayName((user.user_metadata?.full_name as string | undefined) ?? "");
 
       const [tradesResult, accountsResult] = await Promise.all([
         supabase
@@ -343,7 +346,9 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Welcome back, Alden</h1>
+          <h1 className="text-xl font-semibold text-foreground">
+            Welcome back{displayName ? `, ${displayName}` : ""}
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">{today}</p>
         </div>
         <Link

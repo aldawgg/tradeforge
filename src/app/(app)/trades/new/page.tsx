@@ -49,22 +49,42 @@ export default function AddTradePage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [availableAccounts, setAvailableAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [availableInstruments, setAvailableInstruments] = useState<string[]>([]);
+  const [availableSetups, setAvailableSetups] = useState<string[]>([]);
 
   useEffect(() => {
-    async function fetchAccounts() {
+    async function fetchFormData() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase
-        .from("evaluation_accounts")
-        .select("id, account_name")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
-      if (data) {
-        setAvailableAccounts(data.map((row) => ({ id: row.id, name: row.account_name })));
+      const [accountsRes, instrumentsRes, setupsRes] = await Promise.all([
+        supabase
+          .from("evaluation_accounts")
+          .select("id, account_name")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("custom_instruments")
+          .select("name")
+          .eq("user_id", user.id)
+          .order("name"),
+        supabase
+          .from("custom_setups")
+          .select("name")
+          .eq("user_id", user.id)
+          .order("name"),
+      ]);
+      if (accountsRes.data) {
+        setAvailableAccounts(accountsRes.data.map((row) => ({ id: row.id, name: row.account_name })));
+      }
+      if (instrumentsRes.data && instrumentsRes.data.length > 0) {
+        setAvailableInstruments(instrumentsRes.data.map((r) => r.name));
+      }
+      if (setupsRes.data && setupsRes.data.length > 0) {
+        setAvailableSetups(setupsRes.data.map((r) => r.name));
       }
     }
-    fetchAccounts();
+    fetchFormData();
   }, []);
 
   // Lazy-initialised so sessionStorage is only read once on client mount.
@@ -181,6 +201,8 @@ export default function AddTradePage() {
       saveError={saveError}
       onSave={handleSave}
       availableAccounts={availableAccounts}
+      availableInstruments={availableInstruments}
+      availableSetups={availableSetups}
     />
   );
 }

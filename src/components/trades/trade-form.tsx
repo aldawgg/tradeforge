@@ -399,6 +399,10 @@ export interface TradeFormProps {
   onSave: (values: FormState, screenshots: PendingScreenshot[]) => Promise<void>;
   /** Real evaluation accounts fetched from Supabase. */
   availableAccounts?: { id: string; name: string }[];
+  /** Instrument names from the user's custom_instruments table. */
+  availableInstruments?: string[];
+  /** Setup tag names from the user's custom_setups table. */
+  availableSetups?: string[];
   /** Already-saved screenshots shown in edit mode. */
   existingScreenshots?: ExistingScreenshot[];
   /** Called when the user confirms deleting an existing screenshot. */
@@ -415,9 +419,19 @@ export function TradeForm({
   saveError,
   onSave,
   availableAccounts = [],
+  availableInstruments,
+  availableSetups,
   existingScreenshots = [],
   onDeleteExistingScreenshot,
 }: TradeFormProps) {
+  // Derive dropdown options. Fall back to built-in constants when no DB list is provided.
+  const instrumentOptions = availableInstruments && availableInstruments.length > 0
+    ? [...availableInstruments, "Other / Custom"]
+    : [...INSTRUMENTS];
+
+  const setupOptions = availableSetups && availableSetups.length > 0
+    ? [...availableSetups, "Other / Custom"]
+    : [...SETUPS];
   const backHref = mode === "create" ? "/dashboard" : `/trades/${tradeId}`;
 
   const [form, setFormState] = useState<FormState>(() => ({
@@ -550,7 +564,7 @@ export function TradeForm({
                   <SelectValue placeholder="Select instrument..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {INSTRUMENTS.map((i) => (
+                  {instrumentOptions.map((i) => (
                     <SelectItem key={i} value={i}>{i}</SelectItem>
                   ))}
                 </SelectContent>
@@ -692,7 +706,7 @@ export function TradeForm({
                   <SelectValue placeholder="Select setup..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {SETUPS.map((s) => (
+                  {setupOptions.map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
