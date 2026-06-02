@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -16,6 +16,8 @@ import {
   List,
   CalendarDays,
   LogOut,
+  Menu,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -52,6 +54,7 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
   const router = useRouter();
   const tradesActive = pathname.startsWith("/trades");
   const [tradesOpen, setTradesOpen] = useState(tradesActive);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const tradesExpanded = tradesOpen || tradesActive;
 
   const displayName = userName || userEmail || "";
@@ -61,6 +64,21 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
     ? userEmail.charAt(0).toUpperCase()
     : "?";
 
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // Prevent body scroll when mobile drawer is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileOpen]);
+
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -68,9 +86,10 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
     router.refresh();
   }
 
-  return (
-    <aside className="w-60 shrink-0 border-r border-sidebar-border bg-sidebar h-screen sticky top-0 flex flex-col">
-      <div className="px-6 py-5 border-b border-sidebar-border">
+  const navContent = (
+    <>
+      {/* Logo */}
+      <div className="px-6 py-5 border-b border-sidebar-border flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-sidebar-primary">
             <TrendingUp size={14} className="text-sidebar-primary-foreground" />
@@ -79,8 +98,18 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
             TradeForge
           </span>
         </div>
+        {/* Close button — mobile only */}
+        <button
+          type="button"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close navigation"
+          className="lg:hidden p-1.5 rounded-md text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+        >
+          <X size={16} />
+        </button>
       </div>
 
+      {/* Nav items */}
       <nav className="flex-1 p-3 space-y-0.5">
         {TOP_NAV.map((item) => {
           const Icon = item.icon;
@@ -178,7 +207,7 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
         </button>
       </nav>
 
-      {/* User area at the bottom */}
+      {/* User area */}
       <div className="p-3 border-t border-sidebar-border space-y-0.5">
         <div className="flex items-center gap-3 px-3 py-2">
           <div className="flex items-center justify-center w-7 h-7 rounded-full bg-sidebar-accent text-sidebar-accent-foreground text-xs font-semibold shrink-0">
@@ -196,6 +225,49 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
           Sign out
         </button>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile topbar — visible only on mobile */}
+      <div className="fixed top-0 left-0 right-0 z-30 h-14 bg-card border-b border-border flex items-center px-4 gap-3 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open navigation"
+          className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Menu size={18} />
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center w-6 h-6 rounded-md bg-sidebar-primary">
+            <TrendingUp size={12} className="text-sidebar-primary-foreground" />
+          </div>
+          <span className="text-sm font-semibold tracking-tight text-foreground">TradeForge</span>
+        </div>
+      </div>
+
+      {/* Backdrop — mobile only */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar — drawer on mobile, sticky on desktop */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-60 shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col",
+          "transition-transform duration-200 ease-out",
+          "lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {navContent}
+      </aside>
+    </>
   );
 }

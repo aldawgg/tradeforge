@@ -17,6 +17,12 @@ import {
   Moon,
   Monitor,
 } from "lucide-react";
+import { INSTRUMENTS, SETUPS } from "@/components/trades/trade-form";
+
+// ── Built-in lists ─────────────────────────────────────────────────────────
+
+const BUILTIN_INSTRUMENTS = Array.from(INSTRUMENTS).filter((i) => i !== "Other / Custom");
+const BUILTIN_SETUPS = Array.from(SETUPS).filter((s) => s !== "Other / Custom");
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -101,6 +107,12 @@ export default function SettingsPage() {
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [profileError, setProfileError] = useState("");
 
+  // ── Visibility ───────────────────────────────────────────────────────────
+  const [hiddenInstruments, setHiddenInstruments] = useState<string[]>([]);
+  const [hiddenSetups, setHiddenSetups] = useState<string[]>([]);
+  const [togglingInst, setTogglingInst] = useState<string | null>(null);
+  const [togglingSetup, setTogglingSetup] = useState<string | null>(null);
+
   // ── Custom instruments ───────────────────────────────────────────────────
   const [instruments, setInstruments] = useState<CustomInstrument[]>([]);
   const [newInstName, setNewInstName] = useState("");
@@ -153,7 +165,7 @@ export default function SettingsPage() {
       const [profileRes, instRes, setupRes] = await Promise.all([
         supabase
           .from("profiles")
-          .select("full_name")
+          .select("full_name, hidden_instruments, hidden_setups")
           .eq("id", user.id)
           .single(),
         supabase
@@ -170,48 +182,19 @@ export default function SettingsPage() {
 
       if (!profileRes.error && profileRes.data) {
         setDisplayName(profileRes.data.full_name ?? "");
+        setHiddenInstruments((profileRes.data.hidden_instruments as string[] | null) ?? []);
+        setHiddenSetups((profileRes.data.hidden_setups as string[] | null) ?? []);
       }
+      if (!instRes.error && instRes.data) {
+        setInstruments(instRes.data as CustomInstrument[]);
+      }
+      if (!setupRes.error && setupRes.data) {
+        setSetups(setupRes.data as CustomSetup[]);
+      }
+
       if (profileRes.error && profileRes.error.code !== "PGRST116") {
         setLoadError(profileRes.error.message);
       }
-
-      // ── Seed default instruments if this user has none ───────────────────
-      let instList = (instRes.data ?? []) as CustomInstrument[];
-      if (!instRes.error && instList.length === 0) {
-        await supabase.from("custom_instruments").insert([
-          { user_id: user.id, name: "MES", point_value: 5 },
-          { user_id: user.id, name: "MNQ", point_value: 2 },
-          { user_id: user.id, name: "ES",  point_value: 50 },
-          { user_id: user.id, name: "NQ",  point_value: 20 },
-        ]);
-        const refetch = await supabase
-          .from("custom_instruments")
-          .select("id, name, point_value")
-          .eq("user_id", user.id)
-          .order("name");
-        instList = (refetch.data ?? []) as CustomInstrument[];
-      }
-      setInstruments(instList);
-
-      // ── Seed default setups if this user has none ────────────────────────
-      let setupList = (setupRes.data ?? []) as CustomSetup[];
-      if (!setupRes.error && setupList.length === 0) {
-        const DEFAULT_SETUPS = [
-          "VWAP bounce", "VWAP reclaim", "Liquidity sweep", "FVG continuation",
-          "Inverse FVG", "Rejection block", "Breakout retest", "Failed breakout",
-          "Trend continuation", "Reversal trade", "News trade",
-        ];
-        await supabase.from("custom_setups").insert(
-          DEFAULT_SETUPS.map((name) => ({ user_id: user.id, name }))
-        );
-        const refetch = await supabase
-          .from("custom_setups")
-          .select("id, name")
-          .eq("user_id", user.id)
-          .order("name");
-        setupList = (refetch.data ?? []) as CustomSetup[];
-      }
-      setSetups(setupList);
 
       setLoading(false);
     }
@@ -402,6 +385,44 @@ export default function SettingsPage() {
     setConfirmDeleteSetupId(null);
   }
 
+  // ── Toggle instrument visibility ─────────────────────────────────────────
+
+  async function handleToggleInstrument(name: string) {
+    setTogglingInst(name);
+    const newHidden = hiddenInstruments.includes(name)
+      ? hiddenInstruments.filter((h) => h !== name)
+      : [...hiddenInstruments, name];
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ hidden_instruments: newHidden })
+        .eq("id", user.id);
+      if (!error) setHiddenInstruments(newHidden);
+    }
+    setTogglingInst(null);
+  }
+
+  // ── Toggle setup visibility ───────────────────────────────────────────────
+
+  async function handleToggleSetup(name: string) {
+    setTogglingSetup(name);
+    const newHidden = hiddenSetups.includes(name)
+      ? hiddenSetups.filter((h) => h !== name)
+      : [...hiddenSetups, name];
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ hidden_setups: newHidden })
+        .eq("id", user.id);
+      if (!error) setHiddenSetups(newHidden);
+    }
+    setTogglingSetup(null);
+  }
+
   // ── Theme change ─────────────────────────────────────────────────────────
 
   function handleThemeChange(mode: ThemeMode) {
@@ -521,10 +542,10 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        {/* ── Instruments ─────────────────────────────────────────────────── */}
+        {/* ── Instruments ────────────────────────────────────────────────── */}
         <Section
           title="Instruments"
-          description="Manage the instruments available in the trade form. Add, rename, or delete any of them."
+          description="Choose which instruments appear in the trade form. Toggle to hide or show. Add custom instruments beyond the built-in list."
         >
           <div className="space-y-4">
 
@@ -592,73 +613,112 @@ export default function SettingsPage() {
               </p>
             )}
 
-            {/* List */}
-            {instruments.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-1">
-                No custom instruments yet.
-              </p>
-            ) : (
-              <div className="divide-y divide-border">
-                {instruments.map((inst) => (
-                  <div
-                    key={inst.id}
-                    className="flex items-center justify-between py-2.5 gap-3"
-                  >
+            {/* Unified list: built-ins + custom */}
+            <div className="divide-y divide-border">
+              {BUILTIN_INSTRUMENTS.map((name) => {
+                const isHidden = hiddenInstruments.includes(name);
+                const isToggling = togglingInst === name;
+                return (
+                  <div key={name} className="flex items-center justify-between py-2.5 gap-3">
+                    <span className="text-sm font-medium text-foreground">{name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleInstrument(name)}
+                      disabled={isToggling}
+                      className={cn(
+                        "text-xs font-medium px-2 py-0.5 rounded-md border transition-colors shrink-0 min-w-[54px] flex items-center justify-center",
+                        isHidden
+                          ? "border-border text-muted-foreground hover:border-muted-foreground/40"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20"
+                      )}
+                    >
+                      {isToggling ? (
+                        <Loader2 size={10} className="animate-spin" />
+                      ) : isHidden ? (
+                        "Hidden"
+                      ) : (
+                        "Active"
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+              {instruments.map((inst) => {
+                const isHidden = hiddenInstruments.includes(inst.name);
+                const isToggling = togglingInst === inst.name;
+                return (
+                  <div key={inst.id} className="flex items-center justify-between py-2.5 gap-3">
                     <div>
-                      <span className="text-sm font-medium text-foreground">
-                        {inst.name}
-                      </span>
+                      <span className="text-sm font-medium text-foreground">{inst.name}</span>
                       <span className="text-xs text-muted-foreground ml-2">
                         ${inst.point_value} / point
                       </span>
                     </div>
-
-                    {confirmDeleteInstId === inst.id ? (
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-muted-foreground">
-                          Delete?
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteInstrument(inst.id)}
-                          disabled={deletingInstId === inst.id}
-                          className="text-xs font-semibold text-destructive hover:text-destructive/80 disabled:opacity-50 transition-colors"
-                        >
-                          {deletingInstId === inst.id ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            "Yes, delete"
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteInstId(null)}
-                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
-                        onClick={() => setConfirmDeleteInstId(inst.id)}
-                        aria-label={`Delete ${inst.name}`}
-                        className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        onClick={() => handleToggleInstrument(inst.name)}
+                        disabled={isToggling}
+                        className={cn(
+                          "text-xs font-medium px-2 py-0.5 rounded-md border transition-colors min-w-[54px] flex items-center justify-center",
+                          isHidden
+                            ? "border-border text-muted-foreground hover:border-muted-foreground/40"
+                            : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20"
+                        )}
                       >
-                        <Trash2 size={14} />
+                        {isToggling ? (
+                          <Loader2 size={10} className="animate-spin" />
+                        ) : isHidden ? (
+                          "Hidden"
+                        ) : (
+                          "Active"
+                        )}
                       </button>
-                    )}
+                      {confirmDeleteInstId === inst.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Delete?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteInstrument(inst.id)}
+                            disabled={deletingInstId === inst.id}
+                            className="text-xs font-semibold text-destructive hover:text-destructive/80 disabled:opacity-50 transition-colors"
+                          >
+                            {deletingInstId === inst.id ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              "Yes, delete"
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteInstId(null)}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteInstId(inst.id)}
+                          aria-label={`Delete ${inst.name}`}
+                          className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
           </div>
         </Section>
 
-        {/* ── Setup Tags ──────────────────────────────────────────────────── */}
+        {/* ── Setups ─────────────────────────────────────────────────────── */}
         <Section
-          title="Setup Tags"
-          description="Manage the setup tags available in the trade form. Add, rename, or delete any of them."
+          title="Setups"
+          description="Choose which setups appear in the trade form. Toggle to hide or show. Add custom setup tags beyond the built-in list."
         >
           <div className="space-y-4">
 
@@ -706,61 +766,100 @@ export default function SettingsPage() {
               </p>
             )}
 
-            {/* List */}
-            {setups.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-1">
-                No custom setups yet.
-              </p>
-            ) : (
-              <div className="divide-y divide-border">
-                {setups.map((setup) => (
-                  <div
-                    key={setup.id}
-                    className="flex items-center justify-between py-2.5 gap-3"
-                  >
-                    <span className="text-sm font-medium text-foreground">
-                      {setup.name}
-                    </span>
-
-                    {confirmDeleteSetupId === setup.id ? (
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-muted-foreground">
-                          Delete?
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteSetup(setup.id)}
-                          disabled={deletingSetupId === setup.id}
-                          className="text-xs font-semibold text-destructive hover:text-destructive/80 disabled:opacity-50 transition-colors"
-                        >
-                          {deletingSetupId === setup.id ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            "Yes, delete"
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteSetupId(null)}
-                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
+            {/* Unified list: built-ins + custom */}
+            <div className="divide-y divide-border">
+              {BUILTIN_SETUPS.map((name) => {
+                const isHidden = hiddenSetups.includes(name);
+                const isToggling = togglingSetup === name;
+                return (
+                  <div key={name} className="flex items-center justify-between py-2.5 gap-3">
+                    <span className="text-sm font-medium text-foreground">{name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSetup(name)}
+                      disabled={isToggling}
+                      className={cn(
+                        "text-xs font-medium px-2 py-0.5 rounded-md border transition-colors shrink-0 min-w-[54px] flex items-center justify-center",
+                        isHidden
+                          ? "border-border text-muted-foreground hover:border-muted-foreground/40"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20"
+                      )}
+                    >
+                      {isToggling ? (
+                        <Loader2 size={10} className="animate-spin" />
+                      ) : isHidden ? (
+                        "Hidden"
+                      ) : (
+                        "Active"
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+              {setups.map((setup) => {
+                const isHidden = hiddenSetups.includes(setup.name);
+                const isToggling = togglingSetup === setup.name;
+                return (
+                  <div key={setup.id} className="flex items-center justify-between py-2.5 gap-3">
+                    <span className="text-sm font-medium text-foreground">{setup.name}</span>
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
-                        onClick={() => setConfirmDeleteSetupId(setup.id)}
-                        aria-label={`Delete ${setup.name}`}
-                        className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        onClick={() => handleToggleSetup(setup.name)}
+                        disabled={isToggling}
+                        className={cn(
+                          "text-xs font-medium px-2 py-0.5 rounded-md border transition-colors min-w-[54px] flex items-center justify-center",
+                          isHidden
+                            ? "border-border text-muted-foreground hover:border-muted-foreground/40"
+                            : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20"
+                        )}
                       >
-                        <Trash2 size={14} />
+                        {isToggling ? (
+                          <Loader2 size={10} className="animate-spin" />
+                        ) : isHidden ? (
+                          "Hidden"
+                        ) : (
+                          "Active"
+                        )}
                       </button>
-                    )}
+                      {confirmDeleteSetupId === setup.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Delete?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSetup(setup.id)}
+                            disabled={deletingSetupId === setup.id}
+                            className="text-xs font-semibold text-destructive hover:text-destructive/80 disabled:opacity-50 transition-colors"
+                          >
+                            {deletingSetupId === setup.id ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              "Yes, delete"
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteSetupId(null)}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteSetupId(setup.id)}
+                          aria-label={`Delete ${setup.name}`}
+                          className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
           </div>
         </Section>
 

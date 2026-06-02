@@ -34,15 +34,15 @@ export async function middleware(request: NextRequest) {
 
   const isAuthPage = pathname === "/login" || pathname === "/register";
   const isRootPage = pathname === "/";
+  // / is now the public landing page — unauthenticated users can see it.
   const isProtectedPage =
-    isRootPage ||
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/trades") ||
     pathname.startsWith("/evaluations") ||
     pathname.startsWith("/analytics") ||
     pathname.startsWith("/settings");
 
-  // Unauthenticated user hitting a protected page → send to /login
+  // Unauthenticated user hitting a protected app page → send to /login
   if (!user && isProtectedPage) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";

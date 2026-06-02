@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { TradeForm, FormState, EMPTY_FORM } from "@/components/trades/trade-form";
+import { TradeForm, FormState, EMPTY_FORM, INSTRUMENTS, SETUPS } from "@/components/trades/trade-form";
 import type { PendingScreenshot } from "@/components/trades/screenshot-uploader";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -53,16 +53,22 @@ export default function AddTradePage() {
   const [availableSetups, setAvailableSetups] = useState<string[]>([]);
 
   useEffect(() => {
-    async function fetchFormData() {
+    async function fetchAccounts() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const [accountsRes, instrumentsRes, setupsRes] = await Promise.all([
+
+      const [accountsResult, profileResult, customInstResult, customSetupResult] = await Promise.all([
         supabase
           .from("evaluation_accounts")
           .select("id, account_name")
           .eq("user_id", user.id)
           .order("created_at", { ascending: true }),
+        supabase
+          .from("profiles")
+          .select("hidden_instruments, hidden_setups")
+          .eq("id", user.id)
+          .single(),
         supabase
           .from("custom_instruments")
           .select("name")
@@ -74,17 +80,29 @@ export default function AddTradePage() {
           .eq("user_id", user.id)
           .order("name"),
       ]);
-      if (accountsRes.data) {
-        setAvailableAccounts(accountsRes.data.map((row) => ({ id: row.id, name: row.account_name })));
+
+      if (accountsResult.data) {
+        setAvailableAccounts(accountsResult.data.map((row) => ({ id: row.id, name: row.account_name })));
       }
-      if (instrumentsRes.data && instrumentsRes.data.length > 0) {
-        setAvailableInstruments(instrumentsRes.data.map((r) => r.name));
-      }
-      if (setupsRes.data && setupsRes.data.length > 0) {
-        setAvailableSetups(setupsRes.data.map((r) => r.name));
-      }
+
+      const hiddenInst: string[] = (profileResult.data?.hidden_instruments as string[] | null) ?? [];
+      const hiddenSetup: string[] = (profileResult.data?.hidden_setups as string[] | null) ?? [];
+      const customInstNames: string[] = customInstResult.data?.map((r) => r.name) ?? [];
+      const customSetupNames: string[] = customSetupResult.data?.map((r) => r.name) ?? [];
+
+      const defaultInstruments = Array.from(INSTRUMENTS).filter((i) => i !== "Other / Custom");
+      const defaultSetups = Array.from(SETUPS).filter((s) => s !== "Other / Custom");
+
+      setAvailableInstruments([
+        ...defaultInstruments.filter((i) => !hiddenInst.includes(i)),
+        ...customInstNames.filter((n) => !hiddenInst.includes(n)),
+      ]);
+      setAvailableSetups([
+        ...defaultSetups.filter((s) => !hiddenSetup.includes(s)),
+        ...customSetupNames.filter((n) => !hiddenSetup.includes(n)),
+      ]);
     }
-    fetchFormData();
+    fetchAccounts();
   }, []);
 
   // Lazy-initialised so sessionStorage is only read once on client mount.

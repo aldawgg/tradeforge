@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Loader2, AlertCircle, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, AlertCircle, CheckCircle2, AlertTriangle, EyeOff, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { EvaluationAccount, EvaluationStatus } from "@/lib/types";
@@ -13,13 +13,14 @@ import type { EvaluationAccount, EvaluationStatus } from "@/lib/types";
 const FILTER_TABS = ["All", "Evaluation", "Funded", "Passed", "Breached"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
 
-function filterAccounts(accounts: EvaluationAccount[], filter: FilterTab): EvaluationAccount[] {
+function filterAccounts(accounts: EvaluationAccount[], filter: FilterTab, hiddenIds: Set<string>): EvaluationAccount[] {
+  const visible = (a: EvaluationAccount) => !hiddenIds.has(a.id);
   switch (filter) {
-    case "All":        return accounts;
-    case "Evaluation": return accounts.filter((a) => a.status === "In Eval" || a.status === "Not Started");
-    case "Funded":     return accounts.filter((a) => a.status === "Funded");
-    case "Passed":     return accounts.filter((a) => a.status === "Passed");
-    case "Breached":   return accounts.filter((a) => a.status === "Breached");
+    case "All":        return accounts.filter(visible);
+    case "Evaluation": return accounts.filter((a) => visible(a) && (a.status === "In Eval" || a.status === "Not Started"));
+    case "Funded":     return accounts.filter((a) => visible(a) && a.status === "Funded");
+    case "Passed":     return accounts.filter((a) => visible(a) && a.status === "Passed");
+    case "Breached":   return accounts.filter((a) => a.status === "Breached"); // shows hidden accounts so they can be unhidden
   }
 }
 
@@ -115,6 +116,9 @@ interface AccountCardProps {
   confirmFunded: boolean;
   deleting: boolean;
   updatingStatus: boolean;
+  isHidden: boolean;
+  onHide: () => void;
+  onUnhide: () => void;
   onDeleteRequest: () => void;
   onDeleteConfirm: () => void;
   onDeleteCancel: () => void;
@@ -131,6 +135,9 @@ function AccountCard({
   confirmFunded,
   deleting,
   updatingStatus,
+  isHidden,
+  onHide,
+  onUnhide,
   onDeleteRequest,
   onDeleteConfirm,
   onDeleteCancel,
@@ -173,8 +180,43 @@ function AccountCard({
   const threshold = account.consistencyThreshold ?? 30;
   const consistencyAtRisk = account.consistency !== null && account.consistency >= threshold;
 
-  const showStartTarget =
-    account.status !== "In Eval" && account.status !== "Not Started";
+  // Drawdown buffer health for funded accounts.
+  // Formula: bufferRemaining / totalBuffer * 100
+  //   breachLevel    = startingBalance - maxDrawdown  (already computed above)
+  //   bufferRemaining = currentBalance - breachLevel
+  //   totalBuffer     = startingBalance - breachLevel  (= maxDrawdown)
+  const hasFundedHealth = breachLevel !== null && account.maxDrawdown > 0;
+  const fundedHealthPct = hasFundedHealth
+    ? Math.min(100, Math.max(0, (account.currentBalance - (breachLevel as number)) / account.maxDrawdown * 100))
+    : 0;
+  const fundedFillColor =
+    !hasFundedHealth  ? "" :
+    fundedHealthPct > 75 ? "bg-emerald-500" :
+    fundedHealthPct > 50 ? "bg-teal-500" :
+    fundedHealthPct > 25 ? "bg-amber-500" :
+    fundedHealthPct > 10 ? "bg-orange-500" :
+                           "bg-red-500";
+  const fundedTrackColor =
+    !hasFundedHealth  ? "bg-muted" :
+    fundedHealthPct > 75 ? "bg-emerald-900/25" :
+    fundedHealthPct > 50 ? "bg-teal-900/25" :
+    fundedHealthPct > 25 ? "bg-amber-900/25" :
+    fundedHealthPct > 10 ? "bg-orange-900/25" :
+                           "bg-red-900/25";
+  const fundedLabelColor =
+    !hasFundedHealth  ? "text-muted-foreground" :
+    fundedHealthPct > 75 ? "text-emerald-600 dark:text-emerald-400" :
+    fundedHealthPct > 50 ? "text-teal-600 dark:text-teal-400" :
+    fundedHealthPct > 25 ? "text-amber-600 dark:text-amber-400" :
+    fundedHealthPct > 10 ? "text-orange-600 dark:text-orange-400" :
+                           "text-red-500 dark:text-red-400";
+  const fundedZoneLabel =
+    !hasFundedHealth  ? "" :
+    fundedHealthPct > 75 ? "Healthy" :
+    fundedHealthPct > 50 ? "Stable" :
+    fundedHealthPct > 25 ? "Caution" :
+    fundedHealthPct > 10 ? "Danger" :
+                           "Critical";
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm">
@@ -216,7 +258,8 @@ function AccountCard({
 
         {/* Middle: Balance + Progress */}
         <div className="px-5 py-4 flex-1 min-w-0">
-          <div className="flex items-baseline justify-between gap-3 mb-3">
+          {/* Balance row */}
+          <div className="flex items-start justify-between gap-3 mb-3">
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">Current balance</p>
               <p
@@ -230,79 +273,141 @@ function AccountCard({
                 {fmt(account.currentBalance)}
               </p>
             </div>
-            <span
-              className={cn(
-                "text-sm font-semibold tabular-nums shrink-0",
-                isProfit
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-red-500 dark:text-red-400"
+            <div className="text-right shrink-0">
+              <p className="text-xs text-muted-foreground mb-0.5">Net change</p>
+              {account.status === "Funded" ? (
+                <p className="text-sm font-semibold text-muted-foreground">Reset</p>
+              ) : (
+                <p
+                  className={cn(
+                    "text-sm font-semibold tabular-nums",
+                    isProfit
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-500 dark:text-red-400"
+                  )}
+                >
+                  {fmtDiff(balanceDiff)}
+                </p>
               )}
-            >
-              {fmtDiff(balanceDiff)}
-            </span>
+            </div>
           </div>
 
-          {account.status === "Funded" && (
-            <div className="flex items-center gap-2.5">
-              <div className="flex-1 h-1.5 bg-emerald-500/20 rounded-full">
-                <div className="h-full w-full rounded-full bg-emerald-500" />
-              </div>
-              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 shrink-0">
-                Funded
-              </span>
-            </div>
-          )}
-
-          {account.status === "Passed" && (
-            <div className="flex items-center gap-2.5">
-              <div className="flex-1 h-1.5 bg-amber-500/20 rounded-full">
-                <div className="h-full w-full rounded-full bg-amber-500" />
-              </div>
-              <span className="text-xs font-medium text-amber-600 dark:text-amber-400 shrink-0">
-                Target reached · 100%
-              </span>
-            </div>
-          )}
-
-          {account.status === "Breached" && (
-            <div className="flex items-center gap-2.5">
-              <div className="flex-1 h-1.5 bg-red-500/10 rounded-full" />
-              <span className="text-xs font-medium text-red-500 dark:text-red-400 shrink-0">
-                Breached
-              </span>
-            </div>
-          )}
-
+          {/* In Eval / Not Started */}
           {(account.status === "In Eval" || account.status === "Not Started") &&
             progress !== null &&
             account.profitTarget !== null && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-muted-foreground">
-                    Target: {fmt(account.profitTarget)}
-                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">Progress to Target</span>
                   <span className="text-xs font-semibold tabular-nums text-blue-600 dark:text-blue-400">
                     {progress.toFixed(1)}%
                   </span>
                 </div>
-                <div className="w-full h-1.5 bg-muted rounded-full">
+                <div className="w-full h-2 bg-blue-900/25 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full bg-blue-500"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  {fmt(account.profitTarget - account.currentBalance)} to target
-                </p>
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {fmt(account.startingBalance)} start
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {fmt(account.profitTarget)} target
+                  </span>
+                </div>
+                {account.currentBalance < account.profitTarget && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    <span className="tabular-nums">{fmt(account.profitTarget - account.currentBalance)}</span> remaining to target
+                  </p>
+                )}
               </div>
             )}
 
-          {showStartTarget && (
-            <div className="flex items-center gap-4 mt-2.5 text-xs text-muted-foreground">
-              <span>Start: {fmt(account.startingBalance)}</span>
-              {account.profitTarget !== null && (
-                <span>Target: {fmt(account.profitTarget)}</span>
+          {/* Passed */}
+          {account.status === "Passed" && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Target Reached</span>
+                <span className="text-xs font-semibold tabular-nums text-amber-600 dark:text-amber-400">100%</span>
+              </div>
+              <div className="w-full h-2 bg-amber-900/25 rounded-full overflow-hidden">
+                <div className="h-full w-full rounded-full bg-amber-500" />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Waiting for funded account activation.
+              </p>
+            </div>
+          )}
+
+          {/* Funded */}
+          {account.status === "Funded" && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Drawdown Buffer</span>
+                {hasFundedHealth ? (
+                  <span className={cn("text-xs font-semibold tabular-nums", fundedLabelColor)}>
+                    {fundedHealthPct.toFixed(0)}% · {fundedZoneLabel}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </div>
+              <div className={cn("w-full h-2 rounded-full overflow-hidden", fundedTrackColor)}>
+                {hasFundedHealth && (
+                  <div
+                    className={cn("h-full rounded-full", fundedFillColor)}
+                    style={{ width: `${fundedHealthPct}%` }}
+                  />
+                )}
+              </div>
+              {hasFundedHealth ? (
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-xs text-muted-foreground">
+                    Buffer remaining:{" "}
+                    <span className="tabular-nums font-medium text-foreground">
+                      {fmt(account.currentBalance - (breachLevel as number))}
+                    </span>
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    Breach level: {fmt(breachLevel as number)}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Add max drawdown to track funded account health.
+                </p>
               )}
+            </div>
+          )}
+
+          {/* Breached */}
+          {account.status === "Breached" && (
+            <div>
+              <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1.5">
+                Drawdown Breached
+              </p>
+              {breachLevel !== null ? (
+                <div className="space-y-0.5 mb-2">
+                  <p className="text-xs text-muted-foreground">
+                    Breach level:{" "}
+                    <span className="tabular-nums font-medium text-foreground">{fmt(breachLevel)}</span>
+                  </p>
+                  {account.currentBalance < breachLevel && (
+                    <p className="text-xs tabular-nums text-red-500 dark:text-red-400">
+                      {fmt(breachLevel - account.currentBalance)} below limit
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mb-2">
+                  Max drawdown limit was reached.
+                </p>
+              )}
+              <div className="w-full h-2 bg-red-900/25 rounded-full overflow-hidden">
+                <div className="h-full w-full rounded-full bg-red-600/80" />
+              </div>
             </div>
           )}
         </div>
@@ -458,7 +563,7 @@ function AccountCard({
                 Mark as Funded?
               </p>
               <p className="text-xs text-muted-foreground mb-2.5">
-                Has this account been activated by the prop firm? This will move it to Funded.
+                Has this account been activated by the prop firm? The balance will reset to the starting balance and the account will be marked as Funded.
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -489,6 +594,41 @@ function AccountCard({
             </p>
           </div>
 
+        </div>
+      )}
+
+      {/* Breached: hide / unhide */}
+      {account.status === "Breached" && !confirmDelete && (
+        <div className="border-t border-border px-5 py-3 flex items-center justify-between gap-3">
+          {isHidden ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                This account is hidden from the main view.
+              </p>
+              <button
+                type="button"
+                onClick={onUnhide}
+                className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Eye size={11} />
+                Unhide
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Hide this account from your main view.
+              </p>
+              <button
+                type="button"
+                onClick={onHide}
+                className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <EyeOff size={11} />
+                Hide
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -553,6 +693,34 @@ export default function EvaluationsPage() {
   // Banner shown after automatic In Eval → Passed transitions on load
   const [autoPassNotice, setAutoPassNotice] = useState("");
 
+  // Hidden breached account IDs — persisted to localStorage so they survive page reloads.
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem("tradeforge_hidden_evals");
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  function handleHide(accountId: string) {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.add(accountId);
+      try { localStorage.setItem("tradeforge_hidden_evals", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+
+  function handleUnhide(accountId: string) {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.delete(accountId);
+      try { localStorage.setItem("tradeforge_hidden_evals", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+
   // ── Fetch accounts + linked closed trades, then auto-pass if eligible ────
   useEffect(() => {
     async function fetchAccounts() {
@@ -602,6 +770,8 @@ export default function EvaluationsPage() {
 
       // For accounts with linked closed trades: calculated balance = starting_balance + sum(pnl).
       // For accounts with no linked trades: keep the manually entered current_balance as fallback.
+      // Funded accounts skip trade recalculation — the DB current_balance was reset to
+      // starting_balance on funding and is the source of truth for the funded phase.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mappedAccounts = (accountsResult.data ?? []).map((row: any) => {
         const account = mapRow(row);
@@ -728,9 +898,17 @@ export default function EvaluationsPage() {
       return;
     }
 
+    // When marking as Funded, also reset current_balance back to starting_balance.
+    // Prop firms start funded accounts fresh at the original account size.
+    const updatePayload: Record<string, unknown> = { status: newStatus };
+    if (newStatus === "Funded") {
+      const account = accounts.find((a) => a.id === accountId);
+      if (account) updatePayload.current_balance = account.startingBalance;
+    }
+
     const { error } = await supabase
       .from("evaluation_accounts")
-      .update({ status: newStatus })
+      .update(updatePayload)
       .eq("id", accountId)
       .eq("user_id", user.id);
 
@@ -741,7 +919,12 @@ export default function EvaluationsPage() {
     }
 
     setAccounts((prev) =>
-      prev.map((a) => (a.id === accountId ? { ...a, status: newStatus } : a))
+      prev.map((a) => {
+        if (a.id !== accountId) return a;
+        const updated: EvaluationAccount = { ...a, status: newStatus };
+        if (newStatus === "Funded") updated.currentBalance = a.startingBalance;
+        return updated;
+      })
     );
     setUpdatingStatusId(null);
   }
@@ -771,7 +954,10 @@ export default function EvaluationsPage() {
 
   // ── Derived stats ────────────────────────────────────────────────────────
 
-  const filteredAccounts = filterAccounts(accounts, activeFilter);
+  const filteredAccounts = filterAccounts(accounts, activeFilter, hiddenIds);
+  const hiddenBreachedCount = accounts.filter(
+    (a) => a.status === "Breached" && hiddenIds.has(a.id)
+  ).length;
 
   const total    = accounts.length;
   const inEval   = accounts.filter((a) => a.status === "In Eval").length;
@@ -880,6 +1066,20 @@ export default function EvaluationsPage() {
         </p>
       </div>
 
+      {/* Hidden breached accounts notice */}
+      {hiddenBreachedCount > 0 && activeFilter !== "Breached" && (
+        <p className="text-xs text-muted-foreground -mt-2 mb-4">
+          {hiddenBreachedCount} breached {hiddenBreachedCount !== 1 ? "accounts" : "account"} hidden ·{" "}
+          <button
+            type="button"
+            onClick={() => setActiveFilter("Breached")}
+            className="underline underline-offset-2 hover:text-foreground transition-colors"
+          >
+            view in Breached tab
+          </button>
+        </p>
+      )}
+
       {/* Error banners */}
       {deleteError && (
         <div className="mb-4 flex items-start gap-2 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
@@ -945,6 +1145,9 @@ export default function EvaluationsPage() {
               confirmFunded={confirmFundedId === account.id}
               deleting={deletingId === account.id}
               updatingStatus={updatingStatusId === account.id}
+              isHidden={hiddenIds.has(account.id)}
+              onHide={() => handleHide(account.id)}
+              onUnhide={() => handleUnhide(account.id)}
               onDeleteRequest={() => {
                 setConfirmDeleteId(account.id);
                 setDeleteError("");

@@ -353,7 +353,7 @@ export default function DashboardPage() {
         </div>
         <Link
           href="/trades/new"
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <Plus size={15} />
           Log Trade
@@ -371,7 +371,7 @@ export default function DashboardPage() {
           </div>
           <Link
             href="/trades/new"
-            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Plus size={14} />
             Log Trade
@@ -382,10 +382,8 @@ export default function DashboardPage() {
       {/* Always-on row: Total P/L + Current Streak + Best Setup */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
 
-        <div className="rounded-xl border border-primary/20 bg-primary/5 px-6 py-5 shadow-sm">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-            Total P/L
-          </p>
+        <div className="rounded-xl border border-border bg-card px-6 py-5 shadow-sm">
+          <p className="text-xs text-muted-foreground mb-2">Total P/L</p>
           <p className={cn("text-4xl font-bold tabular-nums leading-none", totalPnlColor)}>
             {totalPnlFormatted}
           </p>
@@ -395,20 +393,16 @@ export default function DashboardPage() {
         </div>
 
         <div className={cn("rounded-xl border px-6 py-5 shadow-sm", streakStyle.wrapper)}>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-            Current Streak
-          </p>
+          <p className="text-xs text-muted-foreground mb-2">Current Streak</p>
           <p className={cn("text-2xl font-bold leading-none mb-2", streakStyle.value)}>
             {streakStyle.text}
           </p>
           <p className="text-xs text-muted-foreground">{streakStyle.hint}</p>
         </div>
 
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-6 py-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-card px-6 py-5 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Best Setup
-            </p>
+            <p className="text-xs text-muted-foreground">Best Setup</p>
             <Trophy size={13} className="text-amber-500 shrink-0" />
           </div>
           {bestSetup ? (
@@ -446,9 +440,7 @@ export default function DashboardPage() {
       {/* Period stats */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Performance
-          </p>
+          <p className="text-xs font-medium text-muted-foreground">Performance</p>
           <div className="flex items-center gap-0.5 bg-muted rounded-lg p-1">
             {PERIODS.map((p) => (
               <button
@@ -499,9 +491,7 @@ export default function DashboardPage() {
 
           {/* Total Account Balance */}
           <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
-              Total Account Balance
-            </p>
+            <p className="text-xs font-medium text-muted-foreground mb-3">Total Account Balance</p>
             <p className="text-2xl font-bold text-foreground tabular-nums leading-none">
               ${totalAccountBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })}
             </p>
@@ -539,9 +529,7 @@ export default function DashboardPage() {
             "rounded-xl border px-5 py-4 shadow-sm",
             isOverTarget ? "border-red-500/20 bg-red-500/[0.04]" : "border-border bg-card"
           )}>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
-              Consistency Score
-            </p>
+            <p className="text-xs font-medium text-muted-foreground mb-3">Consistency Score</p>
             <div className="flex items-end justify-between mb-3">
               <p className={cn(
                 "text-3xl font-bold tabular-nums leading-none",
@@ -575,9 +563,7 @@ export default function DashboardPage() {
           {/* Eval Status */}
           <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Eval Status
-              </p>
+              <p className="text-xs font-medium text-muted-foreground">Eval Status</p>
               <Link
                 href="/evaluations"
                 className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"

@@ -399,14 +399,14 @@ export interface TradeFormProps {
   onSave: (values: FormState, screenshots: PendingScreenshot[]) => Promise<void>;
   /** Real evaluation accounts fetched from Supabase. */
   availableAccounts?: { id: string; name: string }[];
-  /** Instrument names from the user's custom_instruments table. */
-  availableInstruments?: string[];
-  /** Setup tag names from the user's custom_setups table. */
-  availableSetups?: string[];
   /** Already-saved screenshots shown in edit mode. */
   existingScreenshots?: ExistingScreenshot[];
   /** Called when the user confirms deleting an existing screenshot. */
   onDeleteExistingScreenshot?: (id: string, storagePath: string) => Promise<void>;
+  /** Active instruments to show in the instrument select. Falls back to all built-ins when empty or omitted. */
+  availableInstruments?: string[];
+  /** Active setups to show in the setup select. Falls back to all built-ins when empty or omitted. */
+  availableSetups?: string[];
 }
 
 export function TradeForm({
@@ -419,20 +419,19 @@ export function TradeForm({
   saveError,
   onSave,
   availableAccounts = [],
-  availableInstruments,
-  availableSetups,
   existingScreenshots = [],
   onDeleteExistingScreenshot,
+  availableInstruments,
+  availableSetups,
 }: TradeFormProps) {
-  // Derive dropdown options. Fall back to built-in constants when no DB list is provided.
+  const backHref = mode === "create" ? "/dashboard" : `/trades/${tradeId}`;
+
   const instrumentOptions = availableInstruments && availableInstruments.length > 0
     ? [...availableInstruments, "Other / Custom"]
-    : [...INSTRUMENTS];
-
+    : Array.from(INSTRUMENTS);
   const setupOptions = availableSetups && availableSetups.length > 0
     ? [...availableSetups, "Other / Custom"]
-    : [...SETUPS];
-  const backHref = mode === "create" ? "/dashboard" : `/trades/${tradeId}`;
+    : Array.from(SETUPS);
 
   const [form, setFormState] = useState<FormState>(() => ({
     ...EMPTY_FORM,

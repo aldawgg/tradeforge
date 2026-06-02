@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, ChevronDown, Loader2, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -147,14 +147,14 @@ function FieldGroup({
   );
 }
 
-// ── Empty form ─────────────────────────────────────────────────────────────
+// ── Empty form — Status defaults to "In Eval" for new accounts ─────────────
 
 const EMPTY_FORM: FormState = {
   firm: "",
   customFirm: "",
   accountName: "",
   accountSize: "",
-  status: "",
+  status: "In Eval",
   startingBalance: "",
   currentBalance: "",
   profitTarget: "",
@@ -175,14 +175,28 @@ export default function NewEvaluationPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [showOptional, setShowOptional] = useState(false);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setFormState((prev) => {
       const next = { ...prev, [key]: value };
-      // When account size is picked, mirror it into starting balance as a convenience default
+
+      // Selecting account size pre-fills starting balance.
+      // Also syncs current balance while user hasn't manually diverged it.
       if (key === "accountSize" && value) {
         next.startingBalance = value as string;
+        if (!prev.currentBalance || prev.currentBalance === prev.startingBalance) {
+          next.currentBalance = value as string;
+        }
       }
+
+      // Typing starting balance keeps current balance in sync until user edits it independently.
+      if (key === "startingBalance") {
+        if (!prev.currentBalance || prev.currentBalance === prev.startingBalance) {
+          next.currentBalance = value as string;
+        }
+      }
+
       return next;
     });
     setErrors((prev) => {
@@ -280,6 +294,11 @@ export default function NewEvaluationPage() {
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
+      // If there are errors in the optional section, open it so user can see them
+      const optionalKeys: (keyof FormErrors)[] = [
+        "minTradingDays", "completedTradingDays", "consistency", "consistencyThreshold",
+      ];
+      if (optionalKeys.some((k) => errs[k])) setShowOptional(true);
       return;
     }
 
@@ -350,9 +369,6 @@ export default function NewEvaluationPage() {
           Evaluation Tracker
         </Link>
         <h1 className="text-xl font-semibold text-foreground">Add Account</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Manually track your prop firm evaluation progress, risk rules, and consistency.
-        </p>
         <p className="text-xs text-muted-foreground mt-4">
           <span className="text-destructive">*</span> Required fields
         </p>
@@ -393,6 +409,7 @@ export default function NewEvaluationPage() {
                   value={form.accountName}
                   onChange={(e) => setField("accountName", e.target.value)}
                   aria-invalid={!!errors.accountName}
+                  autoComplete="off"
                 />
               </FieldGroup>
             </div>
@@ -419,6 +436,7 @@ export default function NewEvaluationPage() {
                 label="Account Size"
                 htmlFor="accountSize"
                 error={errors.accountSize}
+                hint="Selecting this pre-fills your starting balance."
               >
                 <Select
                   value={form.accountSize}
@@ -460,8 +478,11 @@ export default function NewEvaluationPage() {
           </div>
         </SectionCard>
 
-        {/* ── Section 2: Balances ───────────────────────────────── */}
-        <SectionCard title="Balances">
+        {/* ── Section 2: Balances & Risk Rules ─────────────────── */}
+        <SectionCard
+          title="Balances & Risk Rules"
+          description="Set your evaluation target and firm risk limits. Leave blank if not applicable."
+        >
           <div className="space-y-4">
 
             <div className="grid grid-cols-2 gap-4">
@@ -488,6 +509,7 @@ export default function NewEvaluationPage() {
                 label="Current Balance ($)"
                 htmlFor="currentBalance"
                 error={errors.currentBalance}
+                hint="For new accounts, this matches your starting balance."
                 required
               >
                 <Input
@@ -508,7 +530,7 @@ export default function NewEvaluationPage() {
               label="Profit Target ($)"
               htmlFor="profitTarget"
               error={errors.profitTarget}
-              hint="The balance you need to reach to pass. Leave blank for funded accounts with no fixed target."
+              hint="The balance you need to reach to pass this evaluation."
             >
               <Input
                 id="profitTarget"
@@ -523,143 +545,41 @@ export default function NewEvaluationPage() {
               />
             </FieldGroup>
 
-          </div>
-        </SectionCard>
-
-        {/* ── Section 3: Risk Rules ─────────────────────────────── */}
-        <SectionCard
-          title="Risk Rules"
-          description="Set your firm's risk limits. Leave blank if not applicable."
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <FieldGroup
-              label="Max Drawdown ($)"
-              htmlFor="maxDrawdown"
-              error={errors.maxDrawdown}
-              hint="Maximum total loss allowed before the account is breached."
-            >
-              <Input
-                id="maxDrawdown"
-                type="number"
-                min="0"
-                step="100"
-                placeholder="e.g. 2500"
-                value={form.maxDrawdown}
-                onChange={(e) => setField("maxDrawdown", e.target.value)}
-                aria-invalid={!!errors.maxDrawdown}
-                className="no-spin"
-              />
-            </FieldGroup>
-
-            <FieldGroup
-              label="Daily Loss Limit ($)"
-              htmlFor="dailyLossLimit"
-              error={errors.dailyLossLimit}
-              hint="Maximum loss allowed in a single trading day."
-            >
-              <Input
-                id="dailyLossLimit"
-                type="number"
-                min="0"
-                step="100"
-                placeholder="e.g. 1000"
-                value={form.dailyLossLimit}
-                onChange={(e) => setField("dailyLossLimit", e.target.value)}
-                aria-invalid={!!errors.dailyLossLimit}
-                className="no-spin"
-              />
-            </FieldGroup>
-          </div>
-        </SectionCard>
-
-        {/* ── Section 4: Progress ───────────────────────────────── */}
-        <SectionCard
-          title="Progress"
-          description="Track your trading days and consistency score."
-        >
-          <div className="space-y-4">
-
             <div className="grid grid-cols-2 gap-4">
               <FieldGroup
-                label="Minimum Trading Days"
-                htmlFor="minTradingDays"
-                error={errors.minTradingDays}
-                hint="Minimum days required to pass. Enter 0 if your firm has no requirement."
+                label="Max Drawdown ($)"
+                htmlFor="maxDrawdown"
+                error={errors.maxDrawdown}
+                hint="Maximum total loss allowed before the account is breached."
               >
                 <Input
-                  id="minTradingDays"
+                  id="maxDrawdown"
                   type="number"
                   min="0"
-                  step="1"
-                  placeholder="e.g. 7"
-                  value={form.minTradingDays}
-                  onChange={(e) => setField("minTradingDays", e.target.value)}
-                  aria-invalid={!!errors.minTradingDays}
+                  step="100"
+                  placeholder="e.g. 2500"
+                  value={form.maxDrawdown}
+                  onChange={(e) => setField("maxDrawdown", e.target.value)}
+                  aria-invalid={!!errors.maxDrawdown}
                   className="no-spin"
                 />
               </FieldGroup>
 
               <FieldGroup
-                label="Completed Trading Days"
-                htmlFor="completedTradingDays"
-                error={errors.completedTradingDays}
-                hint="Qualifying trading days completed so far."
+                label="Daily Loss Limit ($)"
+                htmlFor="dailyLossLimit"
+                error={errors.dailyLossLimit}
+                hint="Maximum loss allowed in a single trading day."
               >
                 <Input
-                  id="completedTradingDays"
+                  id="dailyLossLimit"
                   type="number"
                   min="0"
-                  step="1"
-                  placeholder="e.g. 4"
-                  value={form.completedTradingDays}
-                  onChange={(e) =>
-                    setField("completedTradingDays", e.target.value)
-                  }
-                  aria-invalid={!!errors.completedTradingDays}
-                  className="no-spin"
-                />
-              </FieldGroup>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FieldGroup
-                label="Consistency (%)"
-                htmlFor="consistency"
-                error={errors.consistency}
-                hint="Your best day as a percentage of total profits. Leave blank if not tracked."
-              >
-                <Input
-                  id="consistency"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  placeholder="e.g. 28"
-                  value={form.consistency}
-                  onChange={(e) => setField("consistency", e.target.value)}
-                  aria-invalid={!!errors.consistency}
-                  className="no-spin"
-                />
-              </FieldGroup>
-
-              <FieldGroup
-                label="Consistency Threshold (%)"
-                htmlFor="consistencyThreshold"
-                error={errors.consistencyThreshold}
-                hint="Percentage at which your account is flagged At Risk. Common values: 30%, 35%."
-              >
-                <Input
-                  id="consistencyThreshold"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  placeholder="e.g. 30"
-                  value={form.consistencyThreshold}
-                  onChange={(e) =>
-                    setField("consistencyThreshold", e.target.value)
-                  }
-                  aria-invalid={!!errors.consistencyThreshold}
+                  step="100"
+                  placeholder="e.g. 1000"
+                  value={form.dailyLossLimit}
+                  onChange={(e) => setField("dailyLossLimit", e.target.value)}
+                  aria-invalid={!!errors.dailyLossLimit}
                   className="no-spin"
                 />
               </FieldGroup>
@@ -668,21 +588,133 @@ export default function NewEvaluationPage() {
           </div>
         </SectionCard>
 
-        {/* ── Section 5: Notes ──────────────────────────────────── */}
-        <SectionCard
-          title="Notes"
-          description="Optional. Add reminders, rule exceptions, or anything else about this account."
-        >
-          <FieldGroup label="Notes" htmlFor="notes">
-            <Textarea
-              id="notes"
-              placeholder="e.g. Avoid trading Fridays. Keep daily losses under $1,000."
-              value={form.notes}
-              onChange={(e) => setField("notes", e.target.value)}
-              className="resize-none min-h-[88px]"
+        {/* ── Section 3: Optional — Progress & Notes ───────────── */}
+        <div className="rounded-xl border border-border bg-card shadow-sm">
+          <button
+            type="button"
+            aria-expanded={showOptional}
+            onClick={() => setShowOptional((v) => !v)}
+            className="flex items-center justify-between w-full px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset rounded-xl"
+          >
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Progress &amp; Notes
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Optional. Trading days, consistency score, and reminders.
+              </p>
+            </div>
+            <ChevronDown
+              size={16}
+              className={cn(
+                "text-muted-foreground transition-transform shrink-0 ml-3",
+                showOptional && "rotate-180"
+              )}
             />
-          </FieldGroup>
-        </SectionCard>
+          </button>
+
+          {showOptional && (
+            <div className="border-t border-border px-5 pb-5 pt-4 space-y-4">
+
+              <div className="grid grid-cols-2 gap-4">
+                <FieldGroup
+                  label="Minimum Trading Days"
+                  htmlFor="minTradingDays"
+                  error={errors.minTradingDays}
+                  hint="Minimum days required to pass. Enter 0 if your firm has no requirement."
+                >
+                  <Input
+                    id="minTradingDays"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="e.g. 7"
+                    value={form.minTradingDays}
+                    onChange={(e) => setField("minTradingDays", e.target.value)}
+                    aria-invalid={!!errors.minTradingDays}
+                    className="no-spin"
+                  />
+                </FieldGroup>
+
+                <FieldGroup
+                  label="Completed Trading Days"
+                  htmlFor="completedTradingDays"
+                  error={errors.completedTradingDays}
+                  hint="Qualifying trading days completed so far. Enter 0 for a new account."
+                >
+                  <Input
+                    id="completedTradingDays"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    value={form.completedTradingDays}
+                    onChange={(e) =>
+                      setField("completedTradingDays", e.target.value)
+                    }
+                    aria-invalid={!!errors.completedTradingDays}
+                    className="no-spin"
+                  />
+                </FieldGroup>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FieldGroup
+                  label="Consistency (%)"
+                  htmlFor="consistency"
+                  error={errors.consistency}
+                  hint="Your best day as a percentage of total profits. Leave blank if not tracked."
+                >
+                  <Input
+                    id="consistency"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    placeholder="e.g. 28"
+                    value={form.consistency}
+                    onChange={(e) => setField("consistency", e.target.value)}
+                    aria-invalid={!!errors.consistency}
+                    className="no-spin"
+                  />
+                </FieldGroup>
+
+                <FieldGroup
+                  label="Consistency Threshold (%)"
+                  htmlFor="consistencyThreshold"
+                  error={errors.consistencyThreshold}
+                  hint="The app flags your account At Risk above this percentage. Common values: 30%, 35%."
+                >
+                  <Input
+                    id="consistencyThreshold"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    placeholder="e.g. 30"
+                    value={form.consistencyThreshold}
+                    onChange={(e) =>
+                      setField("consistencyThreshold", e.target.value)
+                    }
+                    aria-invalid={!!errors.consistencyThreshold}
+                    className="no-spin"
+                  />
+                </FieldGroup>
+              </div>
+
+              <FieldGroup label="Notes" htmlFor="notes">
+                <Textarea
+                  id="notes"
+                  placeholder="e.g. Avoid trading Fridays. Keep daily losses under $1,000."
+                  value={form.notes}
+                  onChange={(e) => setField("notes", e.target.value)}
+                  className="resize-none min-h-[88px]"
+                />
+              </FieldGroup>
+
+            </div>
+          )}
+        </div>
 
         {/* ── Footer ────────────────────────────────────────────── */}
         {saveError && (

@@ -469,7 +469,7 @@ export default function AnalyticsPage() {
           </p>
           <Link
             href="/trades/new"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Plus size={14} />
             Log Trade
@@ -495,9 +495,9 @@ export default function AnalyticsPage() {
       {/* Insight cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
 
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4 shadow-sm">
+        <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Best Setup</p>
+            <p className="text-xs text-muted-foreground">Best Setup</p>
             <Trophy size={13} className="text-amber-500 shrink-0" />
           </div>
           {bestSetup ? (
@@ -512,9 +512,9 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-5 py-4 shadow-sm">
+        <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Best Instrument</p>
+            <p className="text-xs text-muted-foreground">Best Instrument</p>
             <BarChart2 size={13} className="text-blue-500 shrink-0" />
           </div>
           {bestInstrument ? (
@@ -529,9 +529,9 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-4 shadow-sm">
+        <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Best Session</p>
+            <p className="text-xs text-muted-foreground">Best Session</p>
             <Clock size={13} className="text-emerald-500 shrink-0" />
           </div>
           {bestSession ? (
@@ -546,9 +546,9 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-5 py-4 shadow-sm">
+        <div className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Biggest Mistake</p>
+            <p className="text-xs text-muted-foreground">Biggest Mistake</p>
             <AlertTriangle size={13} className="text-red-500 shrink-0" />
           </div>
           {biggestMistake ? (

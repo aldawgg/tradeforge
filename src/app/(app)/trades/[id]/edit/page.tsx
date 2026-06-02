@@ -92,8 +92,6 @@ export default function EditTradePage() {
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(true);
   const [availableAccounts, setAvailableAccounts] = useState<{ id: string; name: string }[]>([]);
-  const [availableInstruments, setAvailableInstruments] = useState<string[]>([]);
-  const [availableSetups, setAvailableSetups] = useState<string[]>([]);
 
   // ── Screenshot state ───────────────────────────────────────────────────
   const [existingScreenshots, setExistingScreenshots] = useState<ExistingScreenshot[]>([]);
@@ -115,7 +113,7 @@ export default function EditTradePage() {
         return;
       }
 
-      const [tradeResult, accountsResult, instrumentsResult, setupsResult] = await Promise.all([
+      const [tradeResult, accountsResult] = await Promise.all([
         supabase
           .from("trades")
           .select("*")
@@ -127,16 +125,6 @@ export default function EditTradePage() {
           .select("id, account_name")
           .eq("user_id", user.id)
           .order("created_at", { ascending: true }),
-        supabase
-          .from("custom_instruments")
-          .select("name")
-          .eq("user_id", user.id)
-          .order("name"),
-        supabase
-          .from("custom_setups")
-          .select("name")
-          .eq("user_id", user.id)
-          .order("name"),
       ]);
 
       if (tradeResult.error) {
@@ -160,26 +148,6 @@ export default function EditTradePage() {
         setAvailableAccounts(
           accountsResult.data.map((row) => ({ id: row.id, name: row.account_name }))
         );
-      }
-
-      if (instrumentsResult.data && instrumentsResult.data.length > 0) {
-        const names = instrumentsResult.data.map((r) => r.name);
-        // If the trade's stored instrument is not in the user's list, append it so the
-        // edit form can still display the current value correctly.
-        const tradeInstrument = tradeResult.data?.instrument;
-        if (tradeInstrument && tradeInstrument !== "Custom" && !names.includes(tradeInstrument)) {
-          names.push(tradeInstrument);
-        }
-        setAvailableInstruments(names);
-      }
-
-      if (setupsResult.data && setupsResult.data.length > 0) {
-        const names = setupsResult.data.map((r) => r.name);
-        const tradeSetup = tradeResult.data?.setup;
-        if (tradeSetup && tradeSetup !== "Custom" && !names.includes(tradeSetup)) {
-          names.push(tradeSetup);
-        }
-        setAvailableSetups(names);
       }
 
       // Load existing screenshots — use public storage URLs (no signed URL needed).
@@ -361,8 +329,6 @@ export default function EditTradePage() {
       saveError={saveError}
       onSave={handleSave}
       availableAccounts={availableAccounts}
-      availableInstruments={availableInstruments}
-      availableSetups={availableSetups}
       existingScreenshots={existingScreenshots}
       onDeleteExistingScreenshot={handleDeleteExistingScreenshot}
     />
