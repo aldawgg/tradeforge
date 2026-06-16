@@ -4,6 +4,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET = "trade-screenshots";
 
+const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
 function err(message: string, status = 500) {
   return NextResponse.json({ error: message }, { status });
 }
@@ -43,6 +51,25 @@ export async function POST(req: NextRequest) {
 
     if (!file || !tradeId || !screenshotType) {
       return err("Missing required fields: file, trade_id, screenshot_type", 400);
+    }
+
+    // Fix #2: validate file type and size server-side
+    if (!ALLOWED_MIME_TYPES.has(file.type)) {
+      return err("Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.", 400);
+    }
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return err("File too large. Maximum size is 10 MB.", 400);
+    }
+
+    // Fix #3: verify the trade belongs to this user before attaching a screenshot
+    const { data: tradeRow, error: tradeErr } = await supabase
+      .from("trades")
+      .select("id")
+      .eq("id", tradeId)
+      .eq("user_id", user.id)
+      .single();
+    if (tradeErr || !tradeRow) {
+      return err("Trade not found.", 404);
     }
 
     const admin = await ensureBucket();
@@ -101,10 +128,12 @@ export async function DELETE(req: NextRequest) {
     const { error: storageError } = await admin.storage.from(BUCKET).remove([storage_path]);
     if (storageError) return err(storageError.message);
 
+    // Fix #1: scope the delete to the current user to prevent IDOR
     const { error: dbError } = await supabase
       .from("trade_screenshots")
       .delete()
-      .eq("id", screenshot_id);
+      .eq("id", screenshot_id)
+      .eq("user_id", user.id);
     if (dbError) return err(dbError.message);
 
     return NextResponse.json({});
