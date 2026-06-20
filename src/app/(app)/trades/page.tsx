@@ -20,6 +20,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -250,6 +251,8 @@ export default function TradesPage() {
   const [sortKey, setSortKey] = useState<SortKey | null>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+
   // Delete state
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -424,13 +427,12 @@ export default function TradesPage() {
             Review, filter, and analyse your logged trades.
           </p>
         </div>
-        <Link
-          href="/trades/new"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        >
-          <Plus size={14} />
-          Log Trade
-        </Link>
+        <Button asChild>
+          <Link href="/trades/new">
+            <Plus size={14} />
+            Log Trade
+          </Link>
+        </Button>
       </div>
 
       {/* Summary cards */}
@@ -453,96 +455,117 @@ export default function TradesPage() {
       </div>
 
       {/* Filters */}
-      <div className="rounded-xl border border-border bg-card shadow-sm px-5 py-4 mb-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Filter size={13} className="text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Filters
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-2.5">
+      {(() => {
+        const extraFilterCount = [instrumentFilter, outcomeFilter, setupFilter, accountFilter]
+          .filter((v) => v !== "all").length;
+        return (
+          <div className="rounded-xl border border-border bg-card shadow-sm px-5 py-4 mb-5">
+            <div className="flex flex-wrap gap-2.5">
+              <div className="relative flex-1 min-w-52">
+                <Search
+                  size={13}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                />
+                <Input
+                  placeholder="Search by setup, account, instrument..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-8 h-8 text-sm"
+                />
+              </div>
 
-          <div className="relative flex-1 min-w-52">
-            <Search
-              size={13}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-            />
-            <Input
-              placeholder="Search by setup, account, instrument..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-8 text-sm"
-            />
+              <Select value={dateRangeFilter} onValueChange={setDateRangeFilter}>
+                <SelectTrigger className="w-36 h-8 text-sm">
+                  <SelectValue placeholder="Date range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="this-week">This week</SelectItem>
+                  <SelectItem value="this-month">This month</SelectItem>
+                  <SelectItem value="this-year">This year</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <button
+                type="button"
+                onClick={() => setShowMoreFilters((v) => !v)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-3 h-8 text-sm font-medium rounded-md border transition-colors",
+                  showMoreFilters || extraFilterCount > 0
+                    ? "border-primary/30 bg-primary/5 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <Filter size={13} />
+                More filters
+                {extraFilterCount > 0 && (
+                  <span className="flex items-center justify-center w-4.5 h-4.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">
+                    {extraFilterCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {showMoreFilters && (
+              <div className="flex flex-wrap gap-2.5 mt-3 pt-3 border-t border-border">
+                <Select value={instrumentFilter} onValueChange={setInstrumentFilter}>
+                  <SelectTrigger className="w-36 h-8 text-sm">
+                    <SelectValue placeholder="Instrument" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All instruments</SelectItem>
+                    {INSTRUMENTS.map((inst) => (
+                      <SelectItem key={inst} value={inst}>
+                        {inst}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
+                  <SelectTrigger className="w-32 h-8 text-sm">
+                    <SelectValue placeholder="Outcome" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All outcomes</SelectItem>
+                    <SelectItem value="Profit">Profit</SelectItem>
+                    <SelectItem value="Loss">Loss</SelectItem>
+                    <SelectItem value="Break even">Break even</SelectItem>
+                    <SelectItem value="Open">Open</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={setupFilter} onValueChange={setSetupFilter}>
+                  <SelectTrigger className="w-44 h-8 text-sm">
+                    <SelectValue placeholder="Setup" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All setups</SelectItem>
+                    {SETUP_TAGS.map((tag) => (
+                      <SelectItem key={tag} value={tag}>
+                        {tag}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={accountFilter} onValueChange={setAccountFilter}>
+                  <SelectTrigger className="w-40 h-8 text-sm">
+                    <SelectValue placeholder="Account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All accounts</SelectItem>
+                    {uniqueAccounts.map((acc) => (
+                      <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
-
-          <Select value={instrumentFilter} onValueChange={setInstrumentFilter}>
-            <SelectTrigger className="w-36 h-8 text-sm">
-              <SelectValue placeholder="Instrument" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All instruments</SelectItem>
-              {INSTRUMENTS.map((inst) => (
-                <SelectItem key={inst} value={inst}>
-                  {inst}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
-            <SelectTrigger className="w-32 h-8 text-sm">
-              <SelectValue placeholder="Outcome" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All outcomes</SelectItem>
-              <SelectItem value="Profit">Profit</SelectItem>
-              <SelectItem value="Loss">Loss</SelectItem>
-              <SelectItem value="Break even">Break even</SelectItem>
-              <SelectItem value="Open">Open</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={setupFilter} onValueChange={setSetupFilter}>
-            <SelectTrigger className="w-44 h-8 text-sm">
-              <SelectValue placeholder="Setup" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All setups</SelectItem>
-              {SETUP_TAGS.map((tag) => (
-                <SelectItem key={tag} value={tag}>
-                  {tag}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={accountFilter} onValueChange={setAccountFilter}>
-            <SelectTrigger className="w-40 h-8 text-sm">
-              <SelectValue placeholder="Account" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All accounts</SelectItem>
-              {uniqueAccounts.map((acc) => (
-                <SelectItem key={acc} value={acc}>{acc}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={dateRangeFilter} onValueChange={setDateRangeFilter}>
-            <SelectTrigger className="w-36 h-8 text-sm">
-              <SelectValue placeholder="Date range" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All time</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="this-week">This week</SelectItem>
-              <SelectItem value="this-month">This month</SelectItem>
-              <SelectItem value="this-year">This year</SelectItem>
-            </SelectContent>
-          </Select>
-
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Delete error banner */}
       {deleteError && (
@@ -790,13 +813,12 @@ function EmptyState() {
         Start by logging your first trade to begin tracking your performance and
         building your journal.
       </p>
-      <Link
-        href="/trades/new"
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      >
-        <Plus size={14} />
-        Log Trade
-      </Link>
+      <Button asChild>
+        <Link href="/trades/new">
+          <Plus size={14} />
+          Log Trade
+        </Link>
+      </Button>
     </div>
   );
 }

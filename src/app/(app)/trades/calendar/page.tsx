@@ -256,7 +256,7 @@ function StatPill({
         {value}
       </p>
       {meter !== undefined && (
-        <div className="h-1 rounded-full bg-muted overflow-hidden">
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
           <div
             className={cn(
               "h-full rounded-full transition-all",

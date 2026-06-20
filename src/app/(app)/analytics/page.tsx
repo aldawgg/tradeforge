@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Trophy, BarChart2, Clock, AlertTriangle,
+  Trophy, BarChart2, Clock, AlertTriangle, Filter,
   ArrowUp, ArrowDown, ArrowUpDown, Loader2, AlertCircle, Plus,
 } from "lucide-react";
 import {
@@ -244,6 +244,7 @@ export default function AnalyticsPage() {
   const [selectedInstrument, setSelectedInstrument] = useState("all");
   const [selectedSetup, setSelectedSetup] = useState("all");
   const [selectedSession, setSelectedSession] = useState("all");
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [setupSortKey, setSetupSortKey] = useState<SetupSortKey | null>(null);
   const [setupSortDir, setSetupSortDir] = useState<SortDir>("desc");
 
@@ -566,80 +567,102 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-8">
+      {(() => {
+        const extraFilterCount = [selectedAccountId, selectedInstrument, selectedSetup, selectedSession]
+          .filter((v) => v !== "all").length;
+        return (
+          <div className="flex flex-wrap items-center gap-2 mb-8">
+            <div className="flex items-center gap-0.5 bg-muted rounded-lg p-1">
+              {PERIODS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPeriod(p)}
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    period === p
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
 
-        {/* Period — functional */}
-        <div className="flex items-center gap-0.5 bg-muted rounded-lg p-1">
-          {PERIODS.map((p) => (
             <button
-              key={p}
               type="button"
-              onClick={() => setPeriod(p)}
+              onClick={() => setShowMoreFilters((v) => !v)}
               className={cn(
-                "px-3 py-1 text-xs font-medium rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                period === p
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                "inline-flex items-center gap-1.5 px-3 h-8 text-sm font-medium rounded-md border transition-colors",
+                showMoreFilters || extraFilterCount > 0
+                  ? "border-primary/30 bg-primary/5 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
-              {p}
+              <Filter size={13} />
+              Filters
+              {extraFilterCount > 0 && (
+                <span className="flex items-center justify-center w-4.5 h-4.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">
+                  {extraFilterCount}
+                </span>
+              )}
             </button>
-          ))}
-        </div>
 
-        {/* Account filter */}
-        <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-          <SelectTrigger className="w-36 h-8 text-sm">
-            <SelectValue placeholder="Account" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All accounts</SelectItem>
-            {accounts.map((a) => (
-              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            {showMoreFilters && (
+              <>
+                <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                  <SelectTrigger className="w-36 h-8 text-sm">
+                    <SelectValue placeholder="Account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All accounts</SelectItem>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-        {/* Instrument filter */}
-        <Select value={selectedInstrument} onValueChange={setSelectedInstrument}>
-          <SelectTrigger className="w-36 h-8 text-sm">
-            <SelectValue placeholder="Instrument" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All instruments</SelectItem>
-            {uniqueInstruments.map((v) => (
-              <SelectItem key={v} value={v}>{v}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+                <Select value={selectedInstrument} onValueChange={setSelectedInstrument}>
+                  <SelectTrigger className="w-36 h-8 text-sm">
+                    <SelectValue placeholder="Instrument" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All instruments</SelectItem>
+                    {uniqueInstruments.map((v) => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-        {/* Setup filter */}
-        <Select value={selectedSetup} onValueChange={setSelectedSetup}>
-          <SelectTrigger className="w-44 h-8 text-sm">
-            <SelectValue placeholder="Setup" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All setups</SelectItem>
-            {uniqueSetups.map((v) => (
-              <SelectItem key={v} value={v}>{v}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+                <Select value={selectedSetup} onValueChange={setSelectedSetup}>
+                  <SelectTrigger className="w-44 h-8 text-sm">
+                    <SelectValue placeholder="Setup" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All setups</SelectItem>
+                    {uniqueSetups.map((v) => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-        {/* Session filter */}
-        <Select value={selectedSession} onValueChange={setSelectedSession}>
-          <SelectTrigger className="w-36 h-8 text-sm">
-            <SelectValue placeholder="Session" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All sessions</SelectItem>
-            {uniqueSessions.map((v) => (
-              <SelectItem key={v} value={v}>{v}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-      </div>
+                <Select value={selectedSession} onValueChange={setSelectedSession}>
+                  <SelectTrigger className="w-36 h-8 text-sm">
+                    <SelectValue placeholder="Session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All sessions</SelectItem>
+                    {uniqueSessions.map((v) => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Session chart + Instrument breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">

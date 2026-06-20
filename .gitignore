@@ -40,5 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Claude Code temporary worktrees
-.claude/worktrees/
+# Claude Code
+.claude/
+.agents/
+.impeccable/
+CLAUDE.md
+AGENTS.md

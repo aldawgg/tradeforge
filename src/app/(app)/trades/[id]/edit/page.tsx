@@ -75,7 +75,7 @@ function buildSubtitle(row: any): string { // eslint-disable-line @typescript-es
     day: "numeric",
     year: "numeric",
   });
-  return `${instrument} ${row.direction} — ${date}`;
+  return `${instrument} ${row.direction}, ${date}`;
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────

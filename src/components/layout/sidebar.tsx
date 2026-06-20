@@ -18,6 +18,7 @@ import {
   LogOut,
   Menu,
   X,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -107,6 +108,17 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
         >
           <X size={16} />
         </button>
+      </div>
+
+      {/* Log Trade CTA */}
+      <div className="px-3 pt-3 pb-1">
+        <Link
+          href="/trades/new"
+          className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 active:bg-sidebar-primary/80 transition-colors"
+        >
+          <Plus size={15} />
+          Log Trade
+        </Link>
       </div>
 
       {/* Nav items */}

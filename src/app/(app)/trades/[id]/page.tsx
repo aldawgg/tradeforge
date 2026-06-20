@@ -6,7 +6,6 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Pencil,
-  Copy,
   Trash2,
   ImageIcon,
   CheckCircle2,
@@ -422,7 +421,7 @@ export default function TradeDetailPage() {
         <div>
           <div className="flex items-center gap-3 mb-1.5">
             <h1 className="text-xl font-semibold text-foreground">
-              {trade.instrument} — {trade.setupType}
+              {trade.instrument}: {trade.setupType}
             </h1>
             <DirectionBadge direction={trade.direction} />
             <OutcomeBadge outcome={trade.outcome} />
@@ -439,13 +438,6 @@ export default function TradeDetailPage() {
           >
             <Trash2 size={13} />
             Delete
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
-          >
-            <Copy size={13} />
-            Duplicate
           </button>
           <Link
             href={`/trades/${trade.id}/edit`}

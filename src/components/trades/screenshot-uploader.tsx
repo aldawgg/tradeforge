@@ -2,6 +2,13 @@
 
 import { useRef, useState } from "react";
 import { UploadCloud, X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -116,20 +123,22 @@ export function ScreenshotUploader({
 
               {/* Type selector + remove */}
               <div className="px-2.5 py-2 flex items-center justify-between gap-2">
-                <select
+                <Select
                   value={p.type}
-                  onChange={(e) =>
-                    handleTypeChange(p.id, e.target.value as ScreenshotType)
-                  }
+                  onValueChange={(v) => handleTypeChange(p.id, v as ScreenshotType)}
                   disabled={disabled}
-                  className="flex-1 min-w-0 text-xs text-muted-foreground bg-transparent border-0 outline-none cursor-pointer focus:text-foreground truncate"
                 >
-                  {SCREENSHOT_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="flex-1 min-w-0 h-7 text-xs border-0 shadow-none px-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SCREENSHOT_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <button
                   type="button"
                   onClick={() => handleRemove(p.id)}

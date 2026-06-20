@@ -45,7 +45,7 @@ export function StatCard({
         {value}
       </p>
       {meter !== undefined && (
-        <div className="h-1 rounded-full bg-muted/60 overflow-hidden mt-2.5">
+        <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden mt-2.5">
           <div
             className={cn(
               "h-full rounded-full transition-all",

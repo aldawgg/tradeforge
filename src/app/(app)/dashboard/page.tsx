@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Plus, Trophy, ExternalLink, Loader2, AlertCircle } from "lucide-react";
-import { StatCard } from "@/components/dashboard/stat-card";
+import { Button } from "@/components/ui/button";
 import { AccountGrowthChart } from "@/components/dashboard/account-growth-chart";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -19,11 +19,11 @@ const PERIOD_LABELS: Record<Period, string> = {
   "YTD": "Year to Date",
 };
 
-const EVAL_WIDGET_STATUSES: { label: string; status: EvaluationStatus; dot: string }[] = [
-  { label: "In Eval",  status: "In Eval",  dot: "bg-blue-500"    },
-  { label: "Passed",   status: "Passed",   dot: "bg-amber-500"   },
-  { label: "Funded",   status: "Funded",   dot: "bg-emerald-500" },
-  { label: "Breached", status: "Breached", dot: "bg-red-500"     },
+const EVAL_WIDGET_STATUSES: { label: string; status: EvaluationStatus; dot: string; shape: string }[] = [
+  { label: "In Eval",  status: "In Eval",  dot: "bg-blue-500",    shape: "rounded-full"    },
+  { label: "Passed",   status: "Passed",   dot: "bg-amber-500",   shape: "rounded-sm"      },
+  { label: "Funded",   status: "Funded",   dot: "bg-emerald-500", shape: "rounded-full"    },
+  { label: "Breached", status: "Breached", dot: "bg-red-500",     shape: "rotate-45"       },
 ];
 
 const CHART_COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4"];
@@ -351,17 +351,55 @@ export default function DashboardPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">{today}</p>
         </div>
-        <Link
-          href="/trades/new"
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 active:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        >
-          <Plus size={15} />
-          Log Trade
-        </Link>
+        <Button asChild size="lg">
+          <Link href="/trades/new">
+            <Plus size={15} />
+            Log Trade
+          </Link>
+        </Button>
       </div>
 
-      {/* No-trades-today prompt */}
-      {period === "1D" && d.trades === "0" && (
+      {/* First-time onboarding prompt */}
+      {trades.length === 0 && (
+        <div className="mb-6 rounded-xl border border-border bg-card px-6 py-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-foreground mb-3">Get started with TradeForge</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Link
+              href="/evaluations/new"
+              className="flex items-center gap-3 rounded-lg border border-border px-4 py-3 hover:bg-muted/50 transition-colors"
+            >
+              <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-muted text-xs font-bold text-muted-foreground shrink-0">1</span>
+              <div>
+                <p className="text-sm font-medium text-foreground">Set up an account</p>
+                <p className="text-xs text-muted-foreground">Add your prop firm or personal account</p>
+              </div>
+            </Link>
+            <Link
+              href="/trades/new"
+              className="flex items-center gap-3 rounded-lg border border-border px-4 py-3 hover:bg-muted/50 transition-colors"
+            >
+              <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-muted text-xs font-bold text-muted-foreground shrink-0">2</span>
+              <div>
+                <p className="text-sm font-medium text-foreground">Log your first trade</p>
+                <p className="text-xs text-muted-foreground">Record your entry, outcome, and reflection</p>
+              </div>
+            </Link>
+            <Link
+              href="/analytics"
+              className="flex items-center gap-3 rounded-lg border border-border px-4 py-3 hover:bg-muted/50 transition-colors"
+            >
+              <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-muted text-xs font-bold text-muted-foreground shrink-0">3</span>
+              <div>
+                <p className="text-sm font-medium text-foreground">Review analytics</p>
+                <p className="text-xs text-muted-foreground">Find your best setups after a few trades</p>
+              </div>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* No-trades-today prompt (only when user has trades but none today) */}
+      {trades.length > 0 && period === "1D" && d.trades === "0" && (
         <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-foreground">No trades logged today</p>
@@ -369,20 +407,19 @@ export default function DashboardPage() {
               Start your session by logging your first trade.
             </p>
           </div>
-          <Link
-            href="/trades/new"
-            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            <Plus size={14} />
-            Log Trade
-          </Link>
+          <Button asChild>
+            <Link href="/trades/new">
+              <Plus size={14} />
+              Log Trade
+            </Link>
+          </Button>
         </div>
       )}
 
-      {/* Always-on row: Total P/L + Current Streak + Best Setup */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      {/* Primary metrics: Total P/L (hero) + Streak */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
 
-        <div className="rounded-xl border border-border bg-card px-6 py-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-card px-6 py-6 shadow-sm">
           <p className="text-xs text-muted-foreground mb-2">Total P/L</p>
           <p className={cn("text-4xl font-bold tabular-nums leading-none", totalPnlColor)}>
             {totalPnlFormatted}
@@ -392,52 +429,29 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className={cn("rounded-xl border px-6 py-5 shadow-sm", streakStyle.wrapper)}>
+        <div className={cn("rounded-xl border px-6 py-6 shadow-sm", streakStyle.wrapper)}>
           <p className="text-xs text-muted-foreground mb-2">Current Streak</p>
           <p className={cn("text-2xl font-bold leading-none mb-2", streakStyle.value)}>
             {streakStyle.text}
           </p>
-          <p className="text-xs text-muted-foreground">{streakStyle.hint}</p>
-        </div>
-
-        <div className="rounded-xl border border-border bg-card px-6 py-5 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Best Setup</p>
-            <Trophy size={13} className="text-amber-500 shrink-0" />
-          </div>
-          {bestSetup ? (
-            <>
-              <p className="text-2xl font-bold text-foreground leading-none mb-3 truncate">
-                {bestSetup.name}
-              </p>
-              <div className="mb-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-muted-foreground">Win rate</span>
-                  <span className="text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                    {bestSetup.winRate}%
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-muted rounded-full">
-                  <div
-                    className="h-full rounded-full bg-emerald-500"
-                    style={{ width: `${bestSetup.winRate}%` }}
-                  />
-                </div>
+          <p className="text-xs text-muted-foreground mb-3">{streakStyle.hint}</p>
+          {bestSetup && (
+            <div className="pt-3 border-t border-border/50">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Trophy size={12} className="text-amber-500 shrink-0" />
+                <span className="text-xs text-muted-foreground">Best Setup</span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {bestSetup.trades} {bestSetup.trades === 1 ? "trade" : "trades"} · {bestSetup.totalPnl}
+              <p className="text-sm font-semibold text-foreground truncate">{bestSetup.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {bestSetup.winRate}% win rate · {bestSetup.trades} {bestSetup.trades === 1 ? "trade" : "trades"} · {bestSetup.totalPnl}
               </p>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground mt-2">
-              No setup data yet. Log your first trade with a setup to see stats.
-            </p>
+            </div>
           )}
         </div>
 
       </div>
 
-      {/* Period stats */}
+      {/* Period stats — secondary tier, compact */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-medium text-muted-foreground">Performance</p>
@@ -459,24 +473,33 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard
-            label={`${PERIOD_LABELS[period]} P/L`}
-            value={d.pl}
-            valueColor={d.plColor}
-            tint={d.plColor !== "default" ? d.plColor : undefined}
-          />
-          <StatCard
-            label="Win Rate"
-            value={d.winRate}
-            subtitle={d.winRateSubtitle}
-            meter={parseFloat(d.winRate)}
-          />
-          <StatCard
-            label="Trades"
-            value={d.trades}
-            subtitle={PERIOD_LABELS[period]}
-          />
+        <div className="grid grid-cols-3 gap-3">
+          <div className={cn(
+            "rounded-lg border px-4 py-3",
+            d.plColor === "green" ? "bg-emerald-500/[0.04] border-emerald-500/15" :
+            d.plColor === "red" ? "bg-red-500/[0.04] border-red-500/15" :
+            "bg-card border-border"
+          )}>
+            <p className="text-xs text-muted-foreground mb-1">{PERIOD_LABELS[period]} P/L</p>
+            <p className={cn(
+              "text-lg font-bold tabular-nums leading-none",
+              d.plColor === "green" && "text-emerald-600 dark:text-emerald-400",
+              d.plColor === "red" && "text-red-500 dark:text-red-400",
+              d.plColor === "default" && "text-foreground"
+            )}>
+              {d.pl}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-card px-4 py-3">
+            <p className="text-xs text-muted-foreground mb-1">Win Rate</p>
+            <p className="text-lg font-bold tabular-nums leading-none text-foreground">{d.winRate}</p>
+            <p className="text-xs text-muted-foreground mt-1">{d.winRateSubtitle}</p>
+          </div>
+          <div className="rounded-lg border border-border bg-card px-4 py-3">
+            <p className="text-xs text-muted-foreground mb-1">Trades</p>
+            <p className="text-lg font-bold tabular-nums leading-none text-foreground">{d.trades}</p>
+            <p className="text-xs text-muted-foreground mt-1">{PERIOD_LABELS[period]}</p>
+          </div>
         </div>
       </div>
 
@@ -578,7 +601,7 @@ export default function DashboardPage() {
                 return (
                   <div key={s.label} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={cn("w-2 h-2 rounded-full shrink-0", s.dot)} />
+                      <span className={cn("w-2 h-2 shrink-0", s.dot, s.shape)} />
                       <span className="text-sm text-muted-foreground">{s.label}</span>
                     </div>
                     <span className="text-sm font-semibold tabular-nums text-foreground">

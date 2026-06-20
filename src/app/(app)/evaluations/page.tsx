@@ -236,11 +236,11 @@ function AccountCard({
                 <StatusBadge status={account.status} />
               </div>
             </div>
-            <div className="flex items-center gap-0.5 shrink-0">
+            <div className="flex items-center gap-0.5 shrink-0 -mr-1.5">
               <Link
                 href={`/evaluations/${account.id}/edit`}
                 title="Edit account"
-                className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Pencil size={15} />
               </Link>
@@ -248,7 +248,7 @@ function AccountCard({
                 type="button"
                 title="Delete account"
                 onClick={onDeleteRequest}
-                className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
               >
                 <Trash2 size={15} />
               </button>
@@ -275,20 +275,18 @@ function AccountCard({
             </div>
             <div className="text-right shrink-0">
               <p className="text-xs text-muted-foreground mb-0.5">Net change</p>
-              {account.status === "Funded" ? (
-                <p className="text-sm font-semibold text-muted-foreground">Reset</p>
-              ) : (
-                <p
-                  className={cn(
-                    "text-sm font-semibold tabular-nums",
-                    isProfit
+              <p
+                className={cn(
+                  "text-sm font-semibold tabular-nums",
+                  balanceDiff === 0
+                    ? "text-muted-foreground"
+                    : isProfit
                       ? "text-emerald-600 dark:text-emerald-400"
                       : "text-red-500 dark:text-red-400"
-                  )}
-                >
-                  {fmtDiff(balanceDiff)}
-                </p>
-              )}
+                )}
+              >
+                {balanceDiff === 0 ? "$0" : fmtDiff(balanceDiff)}
+              </p>
             </div>
           </div>
 
@@ -694,14 +692,14 @@ export default function EvaluationsPage() {
   const [autoPassNotice, setAutoPassNotice] = useState("");
 
   // Hidden breached account IDs — persisted to localStorage so they survive page reloads.
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
     try {
       const raw = localStorage.getItem("tradeforge_hidden_evals");
-      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+      if (raw) setHiddenIds(new Set(JSON.parse(raw) as string[]));
+    } catch {}
+  }, []);
 
   function handleHide(accountId: string) {
     setHiddenIds((prev) => {
