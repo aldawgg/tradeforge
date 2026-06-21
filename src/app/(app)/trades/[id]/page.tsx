@@ -417,14 +417,16 @@ export default function TradeDetailPage() {
       </div>
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-3 mb-1.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1.5">
             <h1 className="text-xl font-semibold text-foreground">
               {trade.instrument}: {trade.setupType}
             </h1>
-            <DirectionBadge direction={trade.direction} />
-            <OutcomeBadge outcome={trade.outcome} />
+            <div className="flex items-center gap-2">
+              <DirectionBadge direction={trade.direction} />
+              <OutcomeBadge outcome={trade.outcome} />
+            </div>
           </div>
           <p className="text-sm text-muted-foreground">
             {trade.account} · {formatTradeDate(trade.date)} · {trade.session}

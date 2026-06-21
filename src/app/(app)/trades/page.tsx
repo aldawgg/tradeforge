@@ -18,6 +18,8 @@ import {
   AlertCircle,
   TrendingUp,
   TrendingDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Button } from "@/components/ui/button";
@@ -37,8 +39,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
-import { formatPnl, formatR } from "@/lib/utils";
+import { cn, formatPnl, formatR } from "@/lib/utils";
+import { toast } from "sonner";
 import { INSTRUMENTS, SETUP_TAGS } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { Trade, TradeOutcome, TradeDirection, TradeStatus } from "@/lib/types";
@@ -252,6 +254,8 @@ export default function TradesPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
   // Delete state
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -325,6 +329,7 @@ export default function TradesPage() {
     setTrades((prev) => prev.filter((t) => t.id !== tradeId));
     setConfirmDeleteId(null);
     setDeletingId(null);
+    toast.success("Trade deleted");
   }
 
   // ── Sort handler ─────────────────────────────────────────────────────────
@@ -358,6 +363,14 @@ export default function TradesPage() {
   });
 
   const sortedTrades = sortTrades(filtered, sortKey, sortDir);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sortedTrades.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedTrades = sortedTrades.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize
+  );
 
   // Unique account names derived from loaded trades for the account filter dropdown
   const uniqueAccounts = [...new Set(trades.map((t) => t.account))].sort();
@@ -469,12 +482,12 @@ export default function TradesPage() {
                 <Input
                   placeholder="Search by setup, account, instrument..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                   className="pl-8 h-8 text-sm"
                 />
               </div>
 
-              <Select value={dateRangeFilter} onValueChange={setDateRangeFilter}>
+              <Select value={dateRangeFilter} onValueChange={(v) => { setDateRangeFilter(v); setPage(1); }}>
                 <SelectTrigger className="w-36 h-8 text-sm">
                   <SelectValue placeholder="Date range" />
                 </SelectTrigger>
@@ -509,7 +522,7 @@ export default function TradesPage() {
 
             {showMoreFilters && (
               <div className="flex flex-wrap gap-2.5 mt-3 pt-3 border-t border-border">
-                <Select value={instrumentFilter} onValueChange={setInstrumentFilter}>
+                <Select value={instrumentFilter} onValueChange={(v) => { setInstrumentFilter(v); setPage(1); }}>
                   <SelectTrigger className="w-36 h-8 text-sm">
                     <SelectValue placeholder="Instrument" />
                   </SelectTrigger>
@@ -523,7 +536,7 @@ export default function TradesPage() {
                   </SelectContent>
                 </Select>
 
-                <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
+                <Select value={outcomeFilter} onValueChange={(v) => { setOutcomeFilter(v); setPage(1); }}>
                   <SelectTrigger className="w-32 h-8 text-sm">
                     <SelectValue placeholder="Outcome" />
                   </SelectTrigger>
@@ -536,7 +549,7 @@ export default function TradesPage() {
                   </SelectContent>
                 </Select>
 
-                <Select value={setupFilter} onValueChange={setSetupFilter}>
+                <Select value={setupFilter} onValueChange={(v) => { setSetupFilter(v); setPage(1); }}>
                   <SelectTrigger className="w-44 h-8 text-sm">
                     <SelectValue placeholder="Setup" />
                   </SelectTrigger>
@@ -550,7 +563,7 @@ export default function TradesPage() {
                   </SelectContent>
                 </Select>
 
-                <Select value={accountFilter} onValueChange={setAccountFilter}>
+                <Select value={accountFilter} onValueChange={(v) => { setAccountFilter(v); setPage(1); }}>
                   <SelectTrigger className="w-40 h-8 text-sm">
                     <SelectValue placeholder="Account" />
                   </SelectTrigger>
@@ -578,7 +591,7 @@ export default function TradesPage() {
       {/* Table or empty state */}
       {trades.length === 0 ? (
         <EmptyState />
-      ) : sortedTrades.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <NoResults
           onClear={() => {
             setSearch("");
@@ -593,21 +606,48 @@ export default function TradesPage() {
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
 
           {/* Table meta bar */}
-          <div className="px-5 py-3 border-b border-border">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
               Showing{" "}
               <span className="font-medium text-foreground">
-                {sortedTrades.length}
+                {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, sortedTrades.length)}
               </span>{" "}
               of{" "}
               <span className="font-medium text-foreground">
-                {trades.length}
+                {sortedTrades.length}
               </span>{" "}
               trades
+              {sortedTrades.length < trades.length && (
+                <span> (filtered from {trades.length})</span>
+              )}
             </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="p-1.5 rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-xs text-muted-foreground px-2 tabular-nums">
+                  {safePage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="p-1.5 rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
           </div>
 
-          <Table className="table-fixed">
+          <div className="overflow-x-auto">
+          <Table className="table-fixed min-w-[900px]">
             <TableHeader>
               <TableRow className="hover:bg-transparent border-border bg-muted/30">
                 <SortHead className="w-[13%] pl-5" sortKey="date"      activeKey={sortKey} activeDir={sortDir} onSort={handleSort}>Date</SortHead>
@@ -632,7 +672,7 @@ export default function TradesPage() {
             </TableHeader>
 
             <TableBody>
-              {sortedTrades.map((trade) => (
+              {paginatedTrades.map((trade) => (
                 <TableRow
                   key={trade.id}
                   className="border-border group cursor-pointer"
@@ -742,8 +782,7 @@ export default function TradesPage() {
                         </button>
                       </div>
                     ) : (
-                      // Normal hover actions
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                         <Link
                           href={`/trades/${trade.id}`}
                           title="View trade"
@@ -779,16 +818,36 @@ export default function TradesPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
 
           {/* Table footer */}
-          <div className="px-5 py-3 border-t border-border bg-muted/20">
+          <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
-              Showing{" "}
-              <span className="font-medium text-foreground">
-                {sortedTrades.length}
-              </span>{" "}
-              trades
+              {paginatedTrades.length} of {sortedTrades.length} trades
             </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="p-1.5 rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-xs text-muted-foreground px-2 tabular-nums">
+                  {safePage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="p-1.5 rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
           </div>
 
         </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2, Loader2, AlertCircle, CheckCircle2, AlertTriangle, EyeOff, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { EvaluationAccount, EvaluationStatus } from "@/lib/types";
 
@@ -878,6 +879,7 @@ export default function EvaluationsPage() {
     setAccounts((prev) => prev.filter((a) => a.id !== accountId));
     setConfirmDeleteId(null);
     setDeletingId(null);
+    toast.success("Account deleted");
   }
 
   // ── Status update handler ────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,7 @@ export default function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,7 +70,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -83,11 +84,38 @@ export default function RegisterPage() {
       return;
     }
 
-    // After signup Supabase may require email confirmation depending on
-    // your project settings. If confirmation is disabled, the user is
-    // signed in immediately and we redirect to the dashboard.
-    router.push("/dashboard");
-    router.refresh();
+    // If email confirmation is required the session will be null.
+    if (data.session) {
+      router.push("/dashboard");
+      router.refresh();
+    } else {
+      setConfirmationSent(true);
+      setLoading(false);
+    }
+  }
+
+  if (confirmationSent) {
+    return (
+      <div className="w-full max-w-sm text-center">
+        <div className="flex justify-center mb-4">
+          <CheckCircle2 size={36} className="text-emerald-500" />
+        </div>
+        <h1 className="text-xl font-semibold text-foreground mb-1">
+          Check your email
+        </h1>
+        <p className="text-sm text-muted-foreground mb-6">
+          We sent a confirmation link to{" "}
+          <span className="font-medium text-foreground">{email}</span>.
+          Click the link to activate your account.
+        </p>
+        <Link
+          href="/login"
+          className="text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary transition-colors"
+        >
+          Go to sign in
+        </Link>
+      </div>
+    );
   }
 
   return (

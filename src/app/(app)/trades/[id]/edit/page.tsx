@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import {
   TradeForm,
@@ -256,6 +257,7 @@ export default function EditTradePage() {
       return;
     }
 
+    toast.success("Trade updated");
     router.push(`/trades/${id}`);
   }
 

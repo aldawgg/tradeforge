@@ -15,46 +15,15 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SectionCard, FieldGroup } from "@/components/ui/form-helpers";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { PROP_FIRMS, ACCOUNT_SIZE_OPTIONS, EVAL_STATUSES } from "@/lib/constants";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type EvalStatus = "Not Started" | "In Eval" | "Passed" | "Funded" | "Breached";
-
-const EVAL_STATUSES: EvalStatus[] = [
-  "Not Started",
-  "In Eval",
-  "Passed",
-  "Funded",
-  "Breached",
-];
-
-const PROP_FIRMS = [
-  "Apex Trader Funding",
-  "Topstep",
-  "Tradeify",
-  "My Funded Futures",
-  "Earn2Trade",
-  "TradeDay",
-  "Bulenox",
-  "Take Profit Trader",
-  "The Funded Trader",
-  "Alpha Futures",
-  "Lucid Trading",
-  "FundedNext",
-  "Other / Custom",
-] as const;
+type EvalStatus = (typeof EVAL_STATUSES)[number];
 
 const KNOWN_FIRMS = PROP_FIRMS.filter((f) => f !== "Other / Custom");
-
-const ACCOUNT_SIZES = [
-  { label: "$25,000",  value: "25000"  },
-  { label: "$50,000",  value: "50000"  },
-  { label: "$75,000",  value: "75000"  },
-  { label: "$100,000", value: "100000" },
-  { label: "$150,000", value: "150000" },
-  { label: "$200,000", value: "200000" },
-] as const;
 
 interface FormState {
   firm: string;
@@ -117,7 +86,7 @@ function rowToFormState(row: any): FormState {
     row.prop_firm_name
   );
   const sizeVal = String(Math.round(Number(row.account_size)));
-  const sizeKnown = ACCOUNT_SIZES.some((s) => s.value === sizeVal);
+  const sizeKnown = ACCOUNT_SIZE_OPTIONS.some((s) => s.value === sizeVal);
 
   return {
     firm: firmKnown ? row.prop_firm_name : "Other / Custom",
@@ -367,6 +336,7 @@ export default function EditEvaluationPage() {
       return;
     }
 
+    toast.success("Account updated");
     router.push("/evaluations");
   }
 
@@ -399,6 +369,7 @@ export default function EditEvaluationPage() {
       return;
     }
 
+    toast.success("Account deleted");
     router.push("/evaluations");
   }
 
@@ -599,7 +570,7 @@ export default function EditEvaluationPage() {
                     <SelectValue placeholder="Select size..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {ACCOUNT_SIZES.map((s) => (
+                    {ACCOUNT_SIZE_OPTIONS.map((s) => (
                       <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                     ))}
                   </SelectContent>

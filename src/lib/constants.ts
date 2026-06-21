@@ -68,6 +68,9 @@ export const PROP_FIRMS = [
   "Bulenox",
   "Take Profit Trader",
   "The Funded Trader",
+  "Alpha Futures",
+  "Lucid Trading",
+  "FundedNext",
   "Other / Custom",
 ] as const;
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { TradeForm, FormState, EMPTY_FORM, INSTRUMENTS, SETUPS } from "@/components/trades/trade-form";
 import type { PendingScreenshot } from "@/components/trades/screenshot-uploader";
@@ -206,6 +207,7 @@ export default function AddTradePage() {
       return;
     }
 
+    toast.success("Trade logged");
     router.push(`/trades/${tradeId}`);
   }
 

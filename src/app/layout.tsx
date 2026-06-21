@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, Geist_Mono } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const archivo = Archivo({
@@ -35,6 +36,7 @@ export default function RootLayout({
           }}
         />
         {children}
+        <Toaster richColors position="bottom-right" />
       </body>
     </html>
   );

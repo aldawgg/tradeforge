@@ -4,6 +4,22 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET = "trade-screenshots";
 
+// Simple in-memory rate limiter: max uploads per user per window
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 20;
+const uploadCounts = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const entry = uploadCounts.get(userId);
+  if (!entry || now >= entry.resetAt) {
+    uploadCounts.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
+
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -31,12 +47,17 @@ async function ensureBucket() {
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return err("SUPABASE_SERVICE_ROLE_KEY is not set in .env.local. Add it and restart the dev server.");
+      console.error("[POST /api/screenshots] SUPABASE_SERVICE_ROLE_KEY is not set");
+      return err("Screenshot uploads are not configured. Contact the administrator.");
     }
 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return err("Unauthorized", 401);
+
+    if (isRateLimited(user.id)) {
+      return err("Too many uploads. Please wait a minute and try again.", 429);
+    }
 
     let formData: FormData;
     try {
@@ -53,7 +74,6 @@ export async function POST(req: NextRequest) {
       return err("Missing required fields: file, trade_id, screenshot_type", 400);
     }
 
-    // Fix #2: validate file type and size server-side
     if (!ALLOWED_MIME_TYPES.has(file.type)) {
       return err("Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.", 400);
     }
@@ -61,7 +81,6 @@ export async function POST(req: NextRequest) {
       return err("File too large. Maximum size is 10 MB.", 400);
     }
 
-    // Fix #3: verify the trade belongs to this user before attaching a screenshot
     const { data: tradeRow, error: tradeErr } = await supabase
       .from("trades")
       .select("id")
@@ -82,7 +101,10 @@ export async function POST(req: NextRequest) {
       .from(BUCKET)
       .upload(path, Buffer.from(bytes), { contentType: file.type });
 
-    if (uploadError) return err(uploadError.message);
+    if (uploadError) {
+      console.error("[POST /api/screenshots] upload:", uploadError.message);
+      return err("Failed to upload screenshot.");
+    }
 
     const { error: dbError } = await supabase.from("trade_screenshots").insert({
       trade_id: tradeId,
@@ -93,14 +115,14 @@ export async function POST(req: NextRequest) {
 
     if (dbError) {
       await admin.storage.from(BUCKET).remove([path]);
-      return err(dbError.message);
+      console.error("[POST /api/screenshots] db:", dbError.message);
+      return err("Failed to save screenshot record.");
     }
 
     return NextResponse.json({ path });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Unexpected server error";
-    console.error("[POST /api/screenshots]", message);
-    return err(message);
+    console.error("[POST /api/screenshots]", e instanceof Error ? e.message : e);
+    return err("Unexpected server error");
   }
 }
 
@@ -108,7 +130,8 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return err("SUPABASE_SERVICE_ROLE_KEY is not set in .env.local.");
+      console.error("[DELETE /api/screenshots] SUPABASE_SERVICE_ROLE_KEY is not set");
+      return err("Screenshot deletion is not configured. Contact the administrator.");
     }
 
     const supabase = await createClient();
@@ -126,20 +149,24 @@ export async function DELETE(req: NextRequest) {
 
     const admin = createAdminClient();
     const { error: storageError } = await admin.storage.from(BUCKET).remove([storage_path]);
-    if (storageError) return err(storageError.message);
+    if (storageError) {
+      console.error("[DELETE /api/screenshots] storage:", storageError.message);
+      return err("Failed to delete screenshot file.");
+    }
 
-    // Fix #1: scope the delete to the current user to prevent IDOR
     const { error: dbError } = await supabase
       .from("trade_screenshots")
       .delete()
       .eq("id", screenshot_id)
       .eq("user_id", user.id);
-    if (dbError) return err(dbError.message);
+    if (dbError) {
+      console.error("[DELETE /api/screenshots] db:", dbError.message);
+      return err("Failed to delete screenshot record.");
+    }
 
     return NextResponse.json({});
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Unexpected server error";
-    console.error("[DELETE /api/screenshots]", message);
-    return err(message);
+    console.error("[DELETE /api/screenshots]", e instanceof Error ? e.message : e);
+    return err("Unexpected server error");
   }
 }
